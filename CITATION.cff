@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below and also cite the original CSLDV suite (see references)."
+title: "pyCSLDV: Continuous scanning laser Doppler vibrometry in Python"
+type: software
+authors:
+  - family-names: Bartlett
+    given-names: Joshua
+    orcid: "https://orcid.org/0009-0007-4513-7683"
+    affiliation: "Texas A&M University"
+  - family-names: Tarazaga
+    given-names: Pablo
+    orcid: "https://orcid.org/0000-0002-5443-8484"
+    affiliation: "Texas A&M University"
+  - family-names: Slavič
+    given-names: Janko
+    orcid: "https://orcid.org/0000-0002-5982-8377"
+    affiliation: "University of Ljubljana, Faculty of Mechanical Engineering"
+version: 0.1.0
+date-released: "2026-07-28"
+license: MIT
+repository-code: "https://github.com/ladisk/pyCSLDV"
+keywords:
+  - CSLDV
+  - laser Doppler vibrometry
+  - structural dynamics
+  - modal analysis
+  - operating deflection shape
+references:
+  - type: software
+    title: "Continuous Scanning Laser Doppler Vibrometry (CSLDV) Vibration Measurement & Simulation Suite"
+    authors:
+      - family-names: Bartlett
+        given-names: Joshua
+        orcid: "https://orcid.org/0009-0007-4513-7683"
+        affiliation: "Texas A&M University"
+      - family-names: Tarazaga
+        given-names: Pablo
+        orcid: "https://orcid.org/0000-0002-5443-8484"
+        affiliation: "Texas A&M University"
+    doi: 10.5281/zenodo.21301126
+    url: "https://zenodo.org/records/21301126"
+    license: CC-BY-4.0
+    version: "1.0"
+    year: 2026

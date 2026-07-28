@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyCSLDV"
+version = "0.1.0"
+authors = [
+    {name = "Joshua Bartlett", email = "jbartlett21@tamu.edu"},
+    {name = "Pablo Tarazaga", email = "ptarazaga@tamu.edu"},
+    {name = "Janko Slavič", email = "janko.slavic@fs.uni-lj.si"},
+]
+maintainers = [{name = "Janko Slavič", email = "janko.slavic@fs.uni-lj.si"}]
+license = "MIT"
+description = "Continuous scanning laser Doppler vibrometry (CSLDV): scan design, simulation and ODS reconstruction."
+readme = "README.rst"
+keywords = ["CSLDV", "LDV", "vibrometry", "structural dynamics", "modal analysis", "sdypy"]
+requires-python = ">=3.10"
+
+# Dependency management (these must be installed for the package to work)
+dependencies = [
+    "numpy>=1.20.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.0.0",
+]
+
+classifiers = [
+    'Development Status :: 3 - Alpha',
+    'Intended Audience :: Science/Research',
+    'Topic :: Scientific/Engineering',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    "License :: OSI Approved :: MIT License",
+]
+
+# Optional dependencies (can be installed with `pip install pyCSLDV[dev]`).
+[project.optional-dependencies]
+dev = [
+    "sphinx",
+    "twine",
+    "wheel",
+    "pytest",
+    "build",
+    "sphinx-book-theme",
+    "sphinx-copybutton>=0.5.2",
+]
+
+[project.urls]
+homepage = "https://github.com/ladisk/pyCSLDV"
+documentation = "https://github.com/ladisk/pyCSLDV"
+source = "https://github.com/ladisk/pyCSLDV"
+
+# Define the files that are included in the wheel
+[tool.hatch.build.targets.wheel]
+include = ["pycsldv/*"]
+
+# Define the files that are included in the source distribution (tar.gz)
+[tool.hatch.build.targets.sdist]
+include = [
+    "pycsldv/*"
+]
