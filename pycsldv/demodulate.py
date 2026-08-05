@@ -29,13 +29,20 @@ from scipy.signal.windows import hann
 __all__ = ["demodulate_ods", "evaluate_ods", "align_phase", "reference_phase"]
 
 
-def _projection(signal, f, fs, window):
+def _projection(signal, f, fs, window = None):
     """
-    Windowed single-sided complex amplitude of ``signal`` at frequency ``f``.
+    Estimate the complex single-sided amplitude of a signal at a specified frequency
+    using a windowed Fourier projection.
 
-    For ``signal = Re{a exp(2j pi f t)}`` the returned value is the complex
-    amplitude ``a`` (window gain is compensated).
+    :param signal: time-domain signal
+    :param f: frequency of interest [Hz]
+    :param fs: sampling frequency [Hz]
+    :param window: window function applied to the signal
+    :return: complex amplitude at frequency ``f`` — magnitude gives the signal
+             amplitude and phase gives the corresponding phase [rad]
     """
+    if window is None:
+        window = np.ones_like(signal)
     n = np.arange(len(signal))
     return 2.0 / window.sum() * np.sum(window * signal * np.exp(-2j * np.pi * f / fs * n))
 

@@ -10,10 +10,10 @@ import numpy as np
 
 from .scan import lissajous
 
-__all__ = ["simulate_response", "plate_mode", "chebyshev_shape"]
+__all__ = ["simulate_response", "plate_mode", "plate_frequency", "chebyshev_shape"]
 
 
-def simulate_response(shape, fz, fx, fy, fs, n_samples,
+def simulate_response(shape, fz, path_x, path_y, fs,
                       phase_x=0.0, phase_y=0.0, response_phase=0.0,
                       noise_std=0.0, rng=None):
     """
@@ -22,24 +22,23 @@ def simulate_response(shape, fz, fx, fy, fs, n_samples,
     :param shape: callable ``shape(x, y)`` returning the deflection-shape
         amplitude on the normalized domain ``[-1, 1] x [-1, 1]``
     :param fz: response (excitation) frequency [Hz]
-    :param fx: x scan frequency [Hz]
-    :param fy: y scan frequency [Hz]
+    :param path_x: x position of the laser spot on the normalized domain
+    :param path_y: y position of the laser spot on the normalized domain
     :param fs: sampling frequency [Hz]
-    :param n_samples: number of samples
-    :param phase_x: x mirror phase [rad]
-    :param phase_y: y mirror phase [rad]
     :param response_phase: phase of the harmonic response [rad]
     :param noise_std: standard deviation of additive Gaussian noise
     :param rng: optional :class:`numpy.random.Generator`
     :return: ``(t, x, y, velocity)``
     """
-    t, x, y = lissajous(fx, fy, n_samples, fs, phase_x, phase_y)
-    velocity = shape(x, y) * np.cos(2 * np.pi * fz * t + response_phase)
+    # t, x, y = lissajous(fx, fy, n_samples, fs, phase_x, phase_y)
+    n_samples = len(path_x)
+    t = np.arange(n_samples) / fs
+    velocity = shape(path_x, path_y) * np.cos(2 * np.pi * fz * t + response_phase)
     if noise_std:
         if rng is None:
             rng = np.random.default_rng()
         velocity = velocity + rng.normal(0.0, noise_std, n_samples)
-    return t, x, y, velocity
+    return velocity
 
 
 def plate_mode(p, q):
@@ -58,6 +57,21 @@ def plate_mode(p, q):
                 * np.sin(q * np.pi * (np.asarray(y) + 1) / 2))
     return shape
 
+def plate_frequency(p, q, Lx, Ly, E, rho, h, nu = 0.3):
+    """
+    Natural frequency of a simply supported rectangular plate.
+
+    :param p: number of half-waves in the x direction
+    :param q: number of half-waves in the y direction
+    :param a: plate length in the x direction [m]
+    :param b: plate length in the y direction [m]
+    :param E: Young's modulus [Pa]
+    :param rho: density [kg/m^3]
+    :param h: thickness [m]
+    :return: natural frequency [Hz]
+    """
+    D = E * h**3 / (12 * (1 - nu**2))
+    return (np.pi / 2) * np.sqrt(D / (rho * h)) * ((p / Lx)**2 + (q / Ly)**2)
 
 def chebyshev_shape(coefficients):
     """

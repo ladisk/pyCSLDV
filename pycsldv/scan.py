@@ -12,7 +12,7 @@ from math import gcd
 
 import numpy as np
 
-__all__ = ["lissajous", "scan_period", "drive_signals"]
+__all__ = ["lissajous", "sinusoidal_scan", "scan_period", "drive_signals"]
 
 
 def lissajous(fx, fy, n_samples, fs, phase_x=0.0, phase_y=0.0, amplitude=(1.0, 1.0)):
@@ -33,6 +33,20 @@ def lissajous(fx, fy, n_samples, fs, phase_x=0.0, phase_y=0.0, amplitude=(1.0, 1
     y = amplitude[1] * np.cos(2 * np.pi * fy * t + phase_y)
     return t, x, y
 
+def sinusoidal_scan(f, n_samples, fs, phase=0.0, amplitude=1.0):
+    """
+    Generate a 1D sinusoidal scan trajectory in normalized coordinates.
+
+    :param f: scan frequency [Hz]
+    :param n_samples: number of samples to generate
+    :param fs: sampling frequency [Hz]
+    :param phase: phase of the drive signal [rad]
+    :param amplitude: trajectory amplitude (normalized units)
+    :return: ``(t, x)`` — time vector [s] and normalized position
+    """
+    t = np.arange(n_samples) / fs
+    x = amplitude * np.cos(2 * np.pi * f * t + phase)
+    return t, x
 
 def scan_period(fx, fy, max_denominator=10**6):
     """
