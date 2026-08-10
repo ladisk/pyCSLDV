@@ -21,16 +21,52 @@ wider `SDyPy <https://github.com/sdypy>`_ ecosystem effort.
 Origin and attribution
 ----------------------
 
-This package is based on the code of the *Continuous Scanning Laser
-Doppler Vibrometry (CSLDV) Vibration Measurement & Simulation Suite*
-(LabVIEW/MATLAB) by Joshua Bartlett and Pablo Tarazaga, FAST Laboratory,
-Texas A&M University, published under the CC-BY-4.0 license at
-`zenodo.org/records/21301126 <https://zenodo.org/records/21301126>`_
-(DOI: `10.5281/zenodo.21301126
-<https://doi.org/10.5281/zenodo.21301126>`_). The authors of the original
-suite are co-authors of this package. If you use pyCSLDV in academic
-work, please cite the original suite as well; complete citation metadata
-(with ORCIDs) is provided in the ``CITATION.cff`` file.
+pyCSLDV is an independent Python reimplementation of the *Continuous
+Scanning Laser Doppler Vibrometry (CSLDV) Vibration Measurement &
+Simulation Suite* (LabVIEW/MATLAB) by Joshua Bartlett and Pablo Tarazaga,
+FAST Laboratory, Texas A&M University, published under the CC-BY-4.0
+license at `zenodo.org/records/21301126
+<https://zenodo.org/records/21301126>`_ (DOI: `10.5281/zenodo.21301126
+<https://doi.org/10.5281/zenodo.21301126>`_).
+
+The measurement principle, the sideband-demodulation processing chain and
+the compensation of the mirror inertial lag follow the original suite, and
+the reconstruction is verified against a transcription of its
+``ComputeODS.m`` (see ``tests/test_matlab_reference.py``). The code is not
+a translation of the MATLAB routines:
+
+- the demodulation is formulated in complex arithmetic, which removes the
+  explicit magnitude/phase quadrant and unwrapping heuristics;
+- the shape is kept in the Chebyshev basis instead of being converted to
+  monomial coefficients, so the sideband normalization is applied
+  explicitly rather than folded into a hard-coded transformation matrix;
+- the global phase is normalized on the dominant coefficient
+  (``align_phase``) rather than on the response baseband phase;
+- overlapping sidebands are detected and reported;
+- the scope is narrower: the LabVIEW acquisition and hardware control, the
+  Rayleigh-Ritz model and the ODS rotation of the original suite have no
+  counterpart here.
+
+If you use pyCSLDV in academic work, please cite the original suite as
+well; complete citation metadata (with ORCIDs) is provided in the
+``CITATION.cff`` file.
+
+Development note
+----------------
+
+The initial Python implementation in this repository was written with
+Claude (Anthropic), working from the published source of the original
+suite. It has not yet been reviewed by the authors of that suite.
+
+The reconstruction chain is covered end to end by the test suite: an exact
+Chebyshev shape is recovered from a simulated measurement to within
+``1e-8``, mirror and response phases are verified to be compensated, a
+plate mode measured with 5 % noise is reconstructed with MAC > 0.99, and
+the result is checked against the transcribed MATLAB reference
+implementation. Those tests validate the processing chain against the
+original method, not against physical measurements; the package is at an
+alpha stage and results should be validated against your own reference
+data before being relied upon.
 
 Installation
 ------------
