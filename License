@@ -1,12 +1,15 @@
 The MIT License (MIT)
 
-Copyright (c) 2026 Joshua Bartlett, Pablo Tarazaga, Janko Slavič
+Copyright (c) 2026 Janko Slavič
 
-This package is based on the "Continuous Scanning Laser Doppler Vibrometry
-(CSLDV) Vibration Measurement & Simulation Suite" by Joshua Bartlett and
-Pablo Tarazaga (Texas A&M University), published under the CC-BY-4.0
-license at https://zenodo.org/records/21301126
-(DOI: 10.5281/zenodo.21301126).
+This package is a reimplementation of the "Continuous Scanning Laser
+Doppler Vibrometry (CSLDV) Vibration Measurement & Simulation Suite" by
+Joshua Bartlett and Pablo Tarazaga (Texas A&M University), published under
+the CC-BY-4.0 license at https://zenodo.org/records/21301126
+(DOI: 10.5281/zenodo.21301126). The original material has been modified;
+see the "Origin and attribution" section of README.rst for the changes.
+The reference implementation transcribed in tests/test_matlab_reference.py
+is adapted from that suite and remains subject to its CC-BY-4.0 terms.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

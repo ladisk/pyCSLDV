@@ -43,7 +43,7 @@ if __name__ == '__main__':
         license='MIT license',
         url='https://github.com/ladisk/pyCSLDV',
         version=version,
-        author='Joshua Bartlett, Pablo Tarazaga, Janko Slavič',
+        author='Janko Slavič',
         author_email='janko.slavic@fs.uni-lj.si',
         maintainer='Janko Slavič',
         maintainer_email='janko.slavic@fs.uni-lj.si',

@@ -2,15 +2,17 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below and also cite the original CSLDV suite (see references)."
 title: "pyCSLDV: Continuous scanning laser Doppler vibrometry in Python"
 type: software
+abstract: >-
+  Python reimplementation of the CSLDV Vibration Measurement & Simulation
+  Suite (Bartlett & Tarazaga, DOI 10.5281/zenodo.21301126, CC-BY-4.0),
+  covering Lissajous scan design, virtual CSLDV experiments and ODS
+  reconstruction by sideband demodulation. The original material has been
+  modified; see the README for the changes. The initial implementation was
+  written with Claude (Anthropic) and has not yet been reviewed by the
+  authors of the original suite.
+# The authors of the original suite are credited in the references section
+# below. Add them here as co-authors once they have reviewed the package.
 authors:
-  - family-names: Bartlett
-    given-names: Joshua
-    orcid: "https://orcid.org/0009-0007-4513-7683"
-    affiliation: "Texas A&M University"
-  - family-names: Tarazaga
-    given-names: Pablo
-    orcid: "https://orcid.org/0000-0002-5443-8484"
-    affiliation: "Texas A&M University"
   - family-names: Slavič
     given-names: Janko
     orcid: "https://orcid.org/0000-0002-5982-8377"
