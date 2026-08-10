@@ -26,7 +26,7 @@ import numpy as np
 from numpy.polynomial import chebyshev
 from scipy.signal.windows import hann
 
-__all__ = ["demodulate_ods", "evaluate_ods", "align_phase", "reference_phase"]
+__all__ = ["demodulate_ods", "evaluate_ods", "align_phase", "reference_phase", "demodulate_ods_1d"]
 
 
 def _projection(signal, f, fs, window = None):
@@ -63,6 +63,120 @@ def reference_phase(signal, f, fs, window=None):
     if window is None:
         window = hann(len(signal), sym=False)
     return np.angle(_projection(signal, f, fs, window))
+
+def demodulate_ods_1d(
+    velocity, fs, fn, fx, order=10, phi_x=0.0
+):
+    """
+    Estimate Chebyshev coefficients of one or more scanned modes
+    using linear least squares.
+
+    The measurement model is
+
+        X = Phi @ T
+
+    where ``T`` contains the temporal sideband basis functions and
+    ``Phi`` contains the Chebyshev coefficients of each mode.
+
+    For multiple modes, the temporal basis is stacked vertically by
+    mode. The resulting coefficient matrix is then split into one
+    Chebyshev coefficient array per mode.
+
+    :param velocity: measured velocity signal(s), shape
+        ``(locations, time)`` or simply ``(time,)``
+    :param fs: sampling frequency [Hz]
+    :param fn: response frequency [Hz], scalar or array
+    :param fx: scan frequency [Hz]
+    :param order: maximum Chebyshev order, scalar or array matching
+        ``fn``
+    :param phi_x: scan-path phase [rad]
+    :return: Chebyshev coefficients. For a single mode, returns an
+        array of shape ``(locations, P+1)`` or ``(P+1,)`` for a
+        single measurement location. For multiple modes, returns a
+        list containing one such array per mode.
+    """
+    velocity = np.asarray(velocity)
+
+    if velocity.ndim == 1:
+        velocity = velocity[None, :]
+        unpack_location = True
+    else:
+        unpack_location = False
+
+    fn = np.atleast_1d(fn)
+    order = np.atleast_1d(order)
+
+    if len(fn) != len(order):
+        raise ValueError(
+            "`fn` and `order` must have the same length."
+        )
+
+    n_locations, n_samples = velocity.shape
+    t = np.arange(n_samples) / fs
+
+    temporal_blocks = []
+
+    for f_mode, P in zip(fn, order):
+        P = int(P)
+        p = np.arange(P + 1)
+
+        omega_pos = 2 * np.pi * (f_mode + p * fx)
+        omega_neg = 2 * np.pi * (f_mode - p * fx)
+
+        T_mode = 0.5 * (
+            np.cos(
+                omega_pos[:, None] * t
+                + p[:, None] * phi_x
+            )
+            +
+            np.cos(
+                omega_neg[:, None] * t
+                - p[:, None] * phi_x
+            )
+        )
+
+        temporal_blocks.append(T_mode)
+
+    # Stack temporal bases vertically by mode:
+    #
+    # T = [T_mode_1]
+    #     [T_mode_2]
+    #       ...
+    T = np.vstack(temporal_blocks)
+
+    # Solve
+    #
+    # X.T = T.T @ Phi.T
+    #
+    # Result:
+    # Phi.shape = (locations, sum(P + 1))
+    Phi = np.linalg.lstsq(
+        T.T,
+        velocity.T,
+        rcond=None
+    )[0].T
+
+    # Split the coefficient matrix into one block per mode.
+    Phi_vec = []
+    column = 0
+
+    for P in order:
+        n_coefficients = int(P) + 1
+
+        phi_mode = Phi[:, column:column + n_coefficients]
+        Phi_vec.append(phi_mode)
+
+        column += n_coefficients
+
+    # For a single measurement location, remove the location dimension.
+    if unpack_location:
+        Phi_vec = [phi[0] for phi in Phi_vec]
+
+    # Preserve the convenient scalar-input behaviour.
+    if len(Phi_vec) == 1:
+        return Phi_vec[0]
+
+    return Phi_vec
 
 
 def demodulate_ods(velocity, x, y, fs, fx, fy, fz, order=10):
