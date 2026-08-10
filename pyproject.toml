@@ -5,9 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "pyCSLDV"
 version = "0.1.0"
+# The authors of the original CSLDV suite (see README.rst, "Origin and
+# attribution") are credited there and in CITATION.cff. Add them here as
+# co-authors once they have reviewed the package:
+#     {name = "Joshua Bartlett", email = "jbartlett21@tamu.edu"},
+#     {name = "Pablo Tarazaga", email = "ptarazaga@tamu.edu"},
 authors = [
-    {name = "Joshua Bartlett", email = "jbartlett21@tamu.edu"},
-    {name = "Pablo Tarazaga", email = "ptarazaga@tamu.edu"},
     {name = "Janko Slavič", email = "janko.slavic@fs.uni-lj.si"},
 ]
 maintainers = [{name = "Janko Slavič", email = "janko.slavic@fs.uni-lj.si"}]
