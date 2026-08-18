@@ -70,6 +70,29 @@ class TestNormalizeScan:
         assert offset == pytest.approx(0.7, abs=0.05)
         assert amplitude == pytest.approx(7.25, rel=0.02)
 
+    def test_scan_rotation_round_trip(self):
+        """A scan rotated by a known angle is measured back off the two
+        mirror signals, whatever the physical extent of each axis."""
+        _, u, v = pycsldv.lissajous(1.4, 20.0, 50000, 5000.0,
+                                    phase_x=0.4, phase_y=-0.9)
+        for angle in (0.0, 1.9, -1.9, 7.0):
+            for scale in ((1.0, 1.0), (35.5, 7.3)):   # square and slender
+                vx, vy = pycsldv.drive_signals(u, v, scale=scale, offset=(3.0, -1.0),
+                                               rotation=np.radians(angle))
+                measured = np.degrees(pycsldv.scan_rotation(vx, vy, 1.4, 20.0, 5000.0))
+                assert measured == pytest.approx(angle, abs=1e-6)
+
+    def test_rotation_couples_the_mirrors(self):
+        """The rotation is what makes each mirror carry a part of the
+        other's motion; without it the drive signals stay separable."""
+        _, u, v = pycsldv.lissajous(1.4, 20.0, 50000, 5000.0)
+        straight = pycsldv.drive_signals(u, v, scale=(35.5, 7.3))
+        askew = pycsldv.drive_signals(u, v, scale=(35.5, 7.3), rotation=np.radians(2.0))
+
+        leak = lambda signal, f: pycsldv.normalize_scan(signal, f, 5000.0)[2]
+        assert leak(straight[0], 20.0) < 1e-9 * leak(straight[0], 1.4)
+        assert leak(askew[0], 20.0) == pytest.approx(7.3 * np.sin(np.radians(2.0)), rel=1e-3)
+
     def test_dominant_frequency(self):
         signal = self._mirror(20.0, offset=5.0, amplitude=1.0) \
             + 0.3 * self._mirror(1.4, offset=0.0, amplitude=1.0)

@@ -21,12 +21,14 @@ series with coefficients ``C``.
 """
 
 import warnings
+from math import comb
 
 import numpy as np
 from numpy.polynomial import chebyshev
 from scipy.signal.windows import hann
 
-__all__ = ["demodulate_ods", "evaluate_ods", "align_phase", "reference_phase", "demodulate_ods_1d"]
+__all__ = ["demodulate_ods", "evaluate_ods", "align_phase", "reference_phase",
+           "demodulate_ods_1d", "rotate_ods"]
 
 
 def _projection(signal, f, fs, window = None):
@@ -264,3 +266,103 @@ def align_phase(coefficients):
     coefficients = np.asarray(coefficients)
     dominant = coefficients.flat[np.argmax(np.abs(coefficients))]
     return coefficients * np.exp(-1j * np.angle(dominant))
+
+
+def _map_axis(func, matrix, axis):
+    """
+    Apply a 1D coefficient transform along one axis of a coefficient matrix.
+
+    :func:`numpy.apply_along_axis` cannot be used because the conversions of
+    :mod:`numpy.polynomial` trim trailing zeros and so do not preserve the
+    length; the result is padded back instead.
+    """
+    matrix = np.moveaxis(np.asarray(matrix), axis, 0)
+    transformed = np.zeros_like(matrix)
+    for column in range(matrix.shape[1]):
+        converted = func(matrix[:, column])
+        transformed[:len(converted), column] = converted
+    return np.moveaxis(transformed, 0, axis)
+
+
+def rotate_ods(coefficients, angle, aspect=1.0):
+    """
+    Express a reconstructed ODS in a rotated coordinate frame.
+
+    The scan axes need not line up with the edges of the measured object: if
+    it is mounted askew, the reconstruction comes out in the frame of the
+    scan and has to be turned onto the object's own axes before it can be
+    compared with a model or with a measurement of a differently mounted
+    specimen. This rotates the shape itself, by substituting the rotated
+    coordinates into the Chebyshev series and expanding again, so the result
+    is exact -- no resampling and no interpolation.
+
+    The new frame is the old one rotated by ``angle``, so a shape whose
+    features run along the old x axis comes back running at ``angle`` to the
+    new one.
+
+    :param coefficients: complex (or real) Chebyshev coefficient matrix, as
+        returned by :func:`demodulate_ods`
+    :param angle: rotation angle [rad]
+    :param aspect: ratio of the x extent of the scanned region to its y
+        extent, e.g. the ratio of the two amplitudes returned by
+        :func:`pycsldv.normalize_scan`. The default of ``1.0`` rotates the
+        normalized domain itself, which is a rotation of the physical surface
+        only when the scan is square; pass the true ratio to rotate the
+        physical surface, as the normalized coordinates compress the two
+        directions differently.
+    :return: coefficient matrix in the rotated frame, of shape
+        ``(n + m + 1, n + m + 1)`` for an input of shape ``(n + 1, m + 1)``:
+        a rotation mixes the two directions, so the tensor-product degree
+        grows even though the total degree does not
+
+    .. warning::
+        The rotated domain is not the domain the shape was reconstructed on:
+        the corners of ``[-1, 1] x [-1, 1]`` turn outside it, where the
+        series extrapolates and a high-order one diverges quickly. The
+        overhang is ``|sin(angle)|`` in the isotropic case but ``aspect``
+        times that across the short direction, so it is the combination of a
+        slender scan and a large angle that is unsafe. A warning is issued
+        when the rotated domain exceeds the original by more than 5 %.
+    """
+    coefficients = np.asarray(coefficients)
+    if coefficients.ndim != 2:
+        raise ValueError("a two-dimensional coefficient matrix is required, "
+                         f"got {coefficients.ndim} dimension(s); a rotation "
+                         "mixes the two directions of the shape")
+    if not aspect > 0:
+        raise ValueError(f"aspect must be a positive extent ratio, got {aspect}")
+    dtype = np.result_type(coefficients.dtype, float)
+    cosine, sine = np.cos(angle), np.sin(angle)
+
+    # x = a x' + b y',  y = c x' + d y'  on the normalized domain
+    a, b = cosine, -sine / aspect
+    c, d = aspect * sine, cosine
+
+    overhang = max(abs(a) + abs(b), abs(c) + abs(d))
+    if overhang > 1.05:
+        warnings.warn(
+            f"the rotated domain extends {100 * (overhang - 1):.0f} % beyond "
+            f"[-1, 1], where the Chebyshev series extrapolates; the shape near "
+            f"the corners is not to be trusted.")
+
+    # Chebyshev -> monomial, so that the rotated coordinates can be
+    # substituted and the powers expanded with the binomial theorem
+    powers = _map_axis(chebyshev.cheb2poly, coefficients.astype(dtype), 0)
+    powers = _map_axis(chebyshev.cheb2poly, powers, 1)
+
+    n_x, n_y = powers.shape[0] - 1, powers.shape[1] - 1
+    rotated = np.zeros((n_x + n_y + 1, n_x + n_y + 1), dtype=dtype)
+    binomial = [[comb(n, k) for k in range(n + 1)] for n in range(max(n_x, n_y) + 1)]
+    for i in range(n_x + 1):
+        for j in range(n_y + 1):
+            if powers[i, j] == 0:
+                continue
+            # (a x' + b y')^i (c x' + d y')^j
+            for k in range(i + 1):
+                term = binomial[i][k] * a ** k * b ** (i - k) * powers[i, j]
+                for l in range(j + 1):
+                    rotated[k + l, (i - k) + (j - l)] += \
+                        term * binomial[j][l] * c ** l * d ** (j - l)
+
+    rotated = _map_axis(chebyshev.poly2cheb, rotated, 0)
+    return _map_axis(chebyshev.poly2cheb, rotated, 1)

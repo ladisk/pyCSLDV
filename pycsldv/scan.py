@@ -16,7 +16,7 @@ from scipy.signal.windows import hann
 from .demodulate import _projection
 
 __all__ = ["lissajous", "sinusoidal_scan", "scan_period", "drive_signals",
-           "normalize_scan", "dominant_frequency"]
+           "normalize_scan", "dominant_frequency", "scan_rotation"]
 
 
 def lissajous(fx, fy, n_samples, fs, phase_x=0.0, phase_y=0.0, amplitude=(1.0, 1.0)):
@@ -116,7 +116,53 @@ def dominant_frequency(signal, fs):
     return np.fft.rfftfreq(len(signal), 1 / fs)[spectrum.argmax()]
 
 
-def drive_signals(x, y, scale=(1.0, 1.0), offset=(0.0, 0.0)):
+def scan_rotation(x, y, fx, fy, fs):
+    """
+    Angle between the scan axes and the mirror axes, from the feedback.
+
+    When the scanned object is mounted askew, the scan is rotated to follow
+    its edges, and each mirror then carries a part of the other one's motion:
+    the x feedback contains a component at ``fy`` and the y feedback one at
+    ``fx``. The size of each, relative to the axis it came from, is the
+    tangent of the rotation angle, which makes the angle measurable from the
+    feedback signals alone -- without trusting the value the acquisition
+    recorded when it was calibrated.
+
+    Both channels give an estimate and the mean is returned. They agree only
+    as far as the rotation describes the scan: a residual difference between
+    them is a sign of second-order geometry that a single angle cannot
+    capture, so compare them when the value matters.
+
+    :param x: measured x mirror feedback signal, in its own units
+    :param y: measured y mirror feedback signal, in the same units
+    :param fx: x scan frequency [Hz]
+    :param fy: y scan frequency [Hz]
+    :param fs: sampling frequency [Hz]
+    :return: rotation angle of the scan [rad], in the sense of the
+        ``rotation`` argument of :func:`drive_signals`
+
+    .. note::
+        This is the angle the *scan* was rotated by, and the reconstruction
+        of :func:`pycsldv.demodulate_ods` is already in that rotated frame:
+        the demodulation reads only the phase of each mirror at its own scan
+        frequency, so it recovers the shape against the scan parameters,
+        which follow the object. What needs the angle is the step back to
+        the mirror axes, and it takes the opposite sign::
+
+            angle = pycsldv.scan_rotation(x, y, fx, fy, fs)
+            in_mirror_frame = pycsldv.rotate_ods(coefficients, -angle)
+    """
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    window = hann(len(x), sym=False)
+
+    # x = A u cos(t) - B v sin(t),  y = A u sin(t) + B v cos(t), so the two
+    # ratios below are real and both equal tan(t)
+    from_x = _projection(y, fx, fs, window) / _projection(x, fx, fs, window)
+    from_y = -_projection(x, fy, fs, window) / _projection(y, fy, fs, window)
+    return float(np.arctan(0.5 * (from_x.real + from_y.real)))
+
+
+def drive_signals(x, y, scale=(1.0, 1.0), offset=(0.0, 0.0), rotation=0.0):
     """
     Map a normalized trajectory to galvo mirror drive voltages.
 
@@ -127,8 +173,17 @@ def drive_signals(x, y, scale=(1.0, 1.0), offset=(0.0, 0.0)):
     :param y: normalized y trajectory
     :param scale: ``(kx, ky)`` voltage per normalized unit [V]
     :param offset: ``(x0, y0)`` voltage offsets [V]
+    :param rotation: angle to rotate the scan by [rad], so that it follows
+        the edges of an object mounted askew. The rotation is applied after
+        the trajectory has been scaled and before it is offset, i.e. in the
+        physical plane of the scan rather than on the normalized domain --
+        which is what makes the two mirror signals mix as they do in a
+        measurement (see :func:`scan_rotation`).
     :return: ``(vx, vy)`` drive voltage signals [V]
     """
-    vx = scale[0] * np.asarray(x) + offset[0]
-    vy = scale[1] * np.asarray(y) + offset[1]
-    return vx, vy
+    vx = scale[0] * np.asarray(x)
+    vy = scale[1] * np.asarray(y)
+    if rotation:
+        cosine, sine = np.cos(rotation), np.sin(rotation)
+        vx, vy = vx * cosine - vy * sine, vx * sine + vy * cosine
+    return vx + offset[0], vy + offset[1]

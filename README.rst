@@ -43,9 +43,14 @@ a translation of the MATLAB routines:
 - the global phase is normalized on the dominant coefficient
   (``align_phase``) rather than on the response baseband phase;
 - overlapping sidebands are detected and reported;
-- the scope is narrower: the LabVIEW acquisition and hardware control, the
-  Rayleigh-Ritz model and the ODS rotation of the original suite have no
-  counterpart here.
+- the ODS rotation acts on the Chebyshev coefficients, so turning a shape
+  onto another set of axes is exact rather than a resampling of a grid, and
+  it is applied to the physical surface or to the normalized domain as the
+  caller chooses (``rotate_ods``); the angle can be measured from the mirror
+  feedback (``scan_rotation``) instead of being taken from the calibration
+  record;
+- the scope is narrower: the LabVIEW acquisition and hardware control and
+  the Rayleigh-Ritz model of the original suite have no counterpart here.
 
 If you use pyCSLDV in academic work, please cite the original suite as
 well; complete citation metadata (with ORCIDs) is provided in the
@@ -124,6 +129,17 @@ telling the channels apart by their scan frequency:
 
     x, x_centre, x_amplitude = pycsldv.normalize_scan(x_mm, fx, fs)
     pycsldv.dominant_frequency(x_mm, fs)   # which mirror is this?
+
+If the object was mounted askew and the scan was rotated to follow its edges,
+the reconstruction already comes out on the object's own axes, because only
+the phase of each mirror at its scan frequency is used. The angle is needed
+only to step back to the mirror axes, and it can be measured from the
+feedback signals rather than trusted to the calibration record:
+
+.. code-block:: python
+
+    angle = pycsldv.scan_rotation(x, y, fx, fy, fs)
+    C_lab = pycsldv.rotate_ods(C, -angle)
 
 An adapter for the export format of the original LabVIEW/MATLAB suite is
 provided as an example rather than as part of the package, in
