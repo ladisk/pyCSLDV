@@ -2,22 +2,23 @@
 Virtual continuous scanning LDV experiment.
 
 Generates the velocity signal an LDV would measure while its laser spot
-follows a Lissajous trajectory over a harmonically vibrating surface, for
+follows a given scan trajectory (e.g. the Lissajous path of
+:func:`pycsldv.lissajous`) over a harmonically vibrating surface, for
 validating the reconstruction chain without hardware.
 """
 
 import numpy as np
 
-from .scan import lissajous
-
 __all__ = ["simulate_response", "plate_mode", "plate_frequency", "chebyshev_shape"]
 
 
 def simulate_response(shape, fz, path_x, path_y, fs,
-                      phase_x=0.0, phase_y=0.0, response_phase=0.0,
-                      noise_std=0.0, rng=None):
+                      response_phase=0.0, noise_std=0.0, rng=None):
     """
     Simulate a CSLDV velocity measurement.
+
+    The scan trajectory is passed in, so any path can be simulated; for a
+    Lissajous scan generate it with :func:`pycsldv.lissajous`.
 
     :param shape: callable ``shape(x, y)`` returning the deflection-shape
         amplitude on the normalized domain ``[-1, 1] x [-1, 1]``
@@ -28,9 +29,8 @@ def simulate_response(shape, fz, path_x, path_y, fs,
     :param response_phase: phase of the harmonic response [rad]
     :param noise_std: standard deviation of additive Gaussian noise
     :param rng: optional :class:`numpy.random.Generator`
-    :return: ``(t, x, y, velocity)``
+    :return: measured velocity signal, of the same length as ``path_x``
     """
-    # t, x, y = lissajous(fx, fy, n_samples, fs, phase_x, phase_y)
     n_samples = len(path_x)
     t = np.arange(n_samples) / fs
     velocity = shape(path_x, path_y) * np.cos(2 * np.pi * fz * t + response_phase)

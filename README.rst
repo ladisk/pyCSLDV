@@ -99,8 +99,8 @@ known deflection shape, reconstruct the ODS and quantify the agreement:
 
     # Virtual measurement of a plate mode with 5 % noise
     shape = pycsldv.plate_mode(2, 3)
-    t, x, y, velocity = pycsldv.simulate_response(shape, fz, fx, fy, fs, n,
-                                                  noise_std=0.05)
+    t, x, y = pycsldv.lissajous(fx, fy, n, fs)
+    velocity = pycsldv.simulate_response(shape, fz, x, y, fs, noise_std=0.05)
 
     # ODS reconstruction by sideband demodulation
     C = pycsldv.demodulate_ods(velocity, x, y, fs, fx, fy, fz, order=8)

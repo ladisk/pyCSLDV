@@ -26,8 +26,8 @@ print(f"Lissajous closure period: {pycsldv.scan_period(fx, fy):.1f} s")
 
 # Simulate the measurement (plate mode (2, 3), 5 % noise)
 shape = pycsldv.plate_mode(2, 3)
-t, x, y, velocity = pycsldv.simulate_response(
-    shape, fz, fx, fy, fs, n_samples, noise_std=0.05)
+t, x, y = pycsldv.lissajous(fx, fy, n_samples, fs)
+velocity = pycsldv.simulate_response(shape, fz, x, y, fs, noise_std=0.05)
 
 # Reconstruct the ODS
 coefficients = pycsldv.demodulate_ods(velocity, x, y, fs, fx, fy, fz, order=order)

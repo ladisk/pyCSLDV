@@ -24,7 +24,8 @@ class TestRoundTrip:
         c_true[2, 0] = 0.4
         shape = pycsldv.chebyshev_shape(c_true)
 
-        _, x, y, v = pycsldv.simulate_response(shape, FZ, FX, FY, FS, N)
+        _, x, y = pycsldv.lissajous(FX, FY, N, FS)
+        v = pycsldv.simulate_response(shape, FZ, x, y, FS)
         c_est = pycsldv.demodulate_ods(v, x, y, FS, FX, FY, FZ, order=3)
 
         assert np.allclose(c_est.imag, 0.0, atol=1e-8)
@@ -38,9 +39,8 @@ class TestRoundTrip:
         c_true[2, 2] = 0.5
         shape = pycsldv.chebyshev_shape(c_true)
 
-        _, x, y, v = pycsldv.simulate_response(
-            shape, FZ, FX, FY, FS, N,
-            phase_x=0.5, phase_y=-0.3, response_phase=0.7)
+        _, x, y = pycsldv.lissajous(FX, FY, N, FS, phase_x=0.5, phase_y=-0.3)
+        v = pycsldv.simulate_response(shape, FZ, x, y, FS, response_phase=0.7)
         c_est = pycsldv.demodulate_ods(v, x, y, FS, FX, FY, FZ, order=2)
 
         aligned = pycsldv.align_phase(c_est)
@@ -52,8 +52,9 @@ class TestRoundTrip:
         reconstructed with a high MAC value."""
         shape = pycsldv.plate_mode(2, 3)
         rng = np.random.default_rng(42)
-        _, x, y, v = pycsldv.simulate_response(
-            shape, FZ, FX, FY, FS, N, noise_std=0.05, rng=rng)
+        _, x, y = pycsldv.lissajous(FX, FY, N, FS)
+        v = pycsldv.simulate_response(shape, FZ, x, y, FS,
+                                      noise_std=0.05, rng=rng)
         c_est = pycsldv.demodulate_ods(v, x, y, FS, FX, FY, FZ, order=8)
 
         x_grid, y_grid, z = pycsldv.evaluate_ods(pycsldv.align_phase(c_est),
@@ -65,7 +66,8 @@ class TestRoundTrip:
         """Overlapping sidebands (fy an integer multiple of fx) trigger a
         warning."""
         shape = pycsldv.plate_mode(1, 1)
-        _, x, y, v = pycsldv.simulate_response(shape, FZ, 2.0, 4.0, FS, N)
+        _, x, y = pycsldv.lissajous(2.0, 4.0, N, FS)
+        v = pycsldv.simulate_response(shape, FZ, x, y, FS)
         with pytest.warns(UserWarning, match="overlaps"):
             pycsldv.demodulate_ods(v, x, y, FS, 2.0, 4.0, FZ, order=2)
 

@@ -124,10 +124,10 @@ def compute_ods_matlab(x, y, z, fs, n_total, fx, fy, fz, nm, resolution):
     return x_grid, y_grid, z_real + 1j * z_imag
 
 
-def _reconstruct_both(shape, order, **simulate_kwargs):
+def _reconstruct_both(shape, order, phase_x=0.0, phase_y=0.0, **simulate_kwargs):
     """Reconstruct one simulated measurement with both implementations."""
-    _, x, y, velocity = pycsldv.simulate_response(
-        shape, FZ, FX, FY, FS, N, **simulate_kwargs)
+    _, x, y = pycsldv.lissajous(FX, FY, N, FS, phase_x, phase_y)
+    velocity = pycsldv.simulate_response(shape, FZ, x, y, FS, **simulate_kwargs)
     *_, reference = compute_ods_matlab(
         x, y, velocity, FS, N, FX, FY, FZ, order, RESOLUTION)
     coefficients = pycsldv.demodulate_ods(
