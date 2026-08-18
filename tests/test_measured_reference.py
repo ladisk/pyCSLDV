@@ -37,6 +37,7 @@ FS = 100_000.0      # sampling rate [S/s]
 FX, FY = 1.4, 20.0  # scan frequencies [Hz]
 FZ = 4527.0         # excitation frequency [Hz]
 ORDER = 12          # spectral sideband quantity
+ROTATION = 1.60368  # sample-alignment angle recorded by the calibration [deg]
 
 
 @pytest.fixture(scope="module")
@@ -92,8 +93,12 @@ class TestMeasuredScan:
         assert pycsldv.dominant_frequency(y, FS) == pytest.approx(FY)
 
     def test_scan_extent(self):
-        """The normalized domain corresponds to the scanned surface: a
-        71 mm x 14.5 mm region, as set up on the front panel."""
+        """The normalized domain corresponds to the scanned surface. The
+        exported mm columns give a 71.0 mm x 14.5 mm region against a sample
+        that is nominally 75 mm x 15 mm; the few per cent is the vertical
+        standoff distance, which was not precisely measured when the setup
+        was calibrated. The reconstruction is unaffected, as it works on the
+        normalized domain."""
         from examples.csldv_suite_export import read_time_response
 
         _, x_mm, y_mm, _ = read_time_response(MEASUREMENT, fx=FX, fy=FY,
@@ -103,6 +108,71 @@ class TestMeasuredScan:
 
         assert 2 * x_amplitude == pytest.approx(71.0, abs=0.5)
         assert 2 * y_amplitude == pytest.approx(14.5, abs=0.5)
+
+    def test_rotation_appears_as_cross_axis_coupling(self):
+        """The suite rotates the commanded scan by the sample-alignment angle
+        recorded during calibration, so that the scan follows the edges of a
+        specimen that is not square to the mirror axes. A rotation mixes the
+        two axes, and the mixing is what the mirror feedback shows: each
+        channel carries a little of the other one's scan frequency.
+
+        The size of each leak, relative to the axis it leaked from, is the
+        tangent of the angle, so the two channels give two independent
+        estimates of it. They agree to a fifth of a degree and both come out
+        above the recorded angle -- the calibration is known to
+        over-compensate. This pins the coupling as geometry: it is neither an
+        imperfection of the mirrors nor a fault in the reconstruction.
+
+        A pure rotation would give the same number twice. That the two differ
+        by 0.2 deg leaves room for a second-order effect on top of it, the
+        14.7 mm spacing between the two mirrors being the obvious candidate,
+        but it is far too small to account for the coupling itself.
+        """
+        from examples.csldv_suite_export import read_time_response
+
+        _, x_mm, y_mm, _ = read_time_response(MEASUREMENT, fx=FX, fy=FY,
+                                              normalize=False)
+
+        def amplitude(signal, f):
+            """Amplitude of the component of a mirror signal at ``f`` [mm]."""
+            return pycsldv.normalize_scan(signal, f, FS)[2]
+
+        # x scans slowly over the long edge, y quickly across the short one
+        long_axis, long_leak = amplitude(x_mm, FX), amplitude(y_mm, FX)
+        short_axis, short_leak = amplitude(y_mm, FY), amplitude(x_mm, FY)
+
+        # each channel is still dominated by its own scan frequency ...
+        assert long_leak < 0.05 * long_axis
+        assert short_leak < 0.05 * short_axis
+
+        # ... but the long axis, being five times the short one, contaminates
+        # the short channel with a sixth of its own amplitude
+        assert long_leak / short_axis == pytest.approx(0.17, abs=0.02)
+
+        # the two estimates of the angle agree, and exceed the recorded one
+        from_long = np.degrees(np.arctan2(long_leak, long_axis))
+        from_short = np.degrees(np.arctan2(short_leak, short_axis))
+        assert from_long == pytest.approx(from_short, abs=0.3)
+        assert ROTATION < min(from_long, from_short)
+        assert max(from_long, from_short) < 2.5
+
+    def test_commanded_pattern_carries_no_rotation(self):
+        """The rotation is absent from the ``LissajousPattern`` export, whose
+        cross-terms sit at machine precision. That file holds the coordinates
+        of the figure the suite plots for illustration, and the figure is
+        drawn before the rotation is applied, so it is not the path the laser
+        followed -- unlike the feedback signals used above."""
+        from examples.csldv_suite_export import read_scan_path
+
+        horizontal, vertical = read_scan_path(DATA / "LissajousPattern_4527.txt")
+
+        for signal, own, other in ((horizontal, FX, FY), (vertical, FY, FX)):
+            # also confirms this export shares the sampling rate of the
+            # measurement, which it has to for the frequencies to be read off
+            assert pycsldv.dominant_frequency(signal, FS) == pytest.approx(own)
+            main = pycsldv.normalize_scan(signal, own, FS)[2]
+            cross = pycsldv.normalize_scan(signal, other, FS)[2]
+            assert cross < 1e-12 * main
 
     def test_carrier_is_symmetric(self, measurement):
         """The sidebands are symmetric about the excitation frequency, which

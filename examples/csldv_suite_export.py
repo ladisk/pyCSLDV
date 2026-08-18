@@ -19,7 +19,12 @@ as their name, e.g. for 4527 Hz:
     of :func:`pycsldv.demodulate_ods`.
 ``LissajousPattern_4527.txt``
     Tab-separated, one header line, two columns: the commanded scan path in
-    mirror drive volts (horizontal, vertical).
+    mirror drive volts (horizontal, vertical). This is the *unrotated*
+    pattern: the suite exports the coordinates of the figure it plots for
+    illustration, and that figure is drawn before the sample-alignment
+    rotation is applied (see the note on rotation below). For the path the
+    laser actually followed, use the mirror feedback columns of
+    ``TimeResponse``.
 ``4527.xlsx``
     The processed results of the suite: the reconstructed ODS on a regular
     grid (``ODS_X``, ``ODS_Y``, ``ODS_Z_Real``, ``ODS_Z_Imag``) and the
@@ -39,9 +44,30 @@ the workbook instead.
     readers were developed against, the column labelled *X-Mirror* in
     ``TimeResponse`` follows the frequency the acquisition GUI calls the
     *Y-Mirror Scanning Frequency*, and the workbook's ``ODS_X`` is the axis
-    that ``LissajousPattern`` lists second. Pass the scan frequencies to
+    that ``LissajousPattern`` lists second. The author of the suite
+    attributes the first of these to the mirror channels having been swapped
+    in the wiring or in the acquisition backend, which makes it a property of
+    that measurement rather than of the export format: another dataset may
+    well be labelled correctly. Either way, pass the scan frequencies to
     :func:`read_time_response` so that the channels are matched by their
     measured frequency rather than by their label.
+
+.. note::
+    The suite rotates the scan by the sample-alignment angle recorded during
+    calibration, and exports the ODS in that rotated sample frame. The
+    rotation shows up in the ``TimeResponse`` mirror columns as cross-axis
+    coupling -- each column carries a little of the other mirror's scan
+    frequency -- but not in ``LissajousPattern``, which is exported
+    unrotated. It is worth checking against the calibration angle, as the
+    calibration is known to over-compensate: in the 4527 Hz dataset the
+    coupling implies 1.8 deg to 2.0 deg against a recorded 1.60368 deg.
+
+    pyCSLDV reconstructs in the scan frame and has no counterpart to the
+    rotation. This costs little: :func:`pycsldv.normalize_scan` takes the
+    amplitude at the scan frequency, so the coupling does not disturb the
+    normalization, and for the small angles used in practice the two frames
+    stay close -- the 4527 Hz reconstruction reaches MAC > 0.99 against the
+    suite's own rotated ODS.
 """
 
 import warnings
@@ -137,7 +163,8 @@ def read_ods_export(path):
     :return: ``(x, y, z)`` on a square grid of shape ``(n, n)``; ``x`` varies
         along the first axis and ``z`` is complex [mm/s per excitation volt].
         Which physical axis ``x`` is follows the workbook, not the scan
-        frequencies (see the module documentation).
+        frequencies, and the shape is in the rotated sample frame (see the
+        module documentation).
     """
     columns = _read_xlsx_columns(path)
 
