@@ -115,7 +115,19 @@ known deflection shape, reconstruct the ODS and quantify the agreement:
 
 For measured data, pass the recorded velocity and mirror feedback signals
 to ``demodulate_ods`` directly — the mirror phases (inertial lag) are
-estimated from the feedback signals themselves.
+estimated from the feedback signals themselves. pyCSLDV reads no file
+formats of its own; the two steps a measurement does need before the
+reconstruction are mapping each mirror signal onto the normalized domain and
+telling the channels apart by their scan frequency:
+
+.. code-block:: python
+
+    x, x_centre, x_amplitude = pycsldv.normalize_scan(x_mm, fx, fs)
+    pycsldv.dominant_frequency(x_mm, fs)   # which mirror is this?
+
+An adapter for the export format of the original LabVIEW/MATLAB suite is
+provided as an example rather than as part of the package, in
+``examples/csldv_suite_export.py``.
 
 The same example can be run from the project base directory with:
 
@@ -125,7 +137,12 @@ The same example can be run from the project base directory with:
 
 For a guided walk-through of the complete workflow — trajectory design,
 sideband spectrum, ODS reconstruction and MAC validation — see the
-`Showcase notebook <Showcase.ipynb>`_.
+`Showcase notebook <Showcase.ipynb>`_. The same workflow on a real
+measurement, compared with the ODS the original suite reconstructed from the
+same samples, is in `Showcase_measured.ipynb <Showcase_measured.ipynb>`_.
+That dataset is not part of the repository and will be published separately
+on Zenodo; ``tests/test_measured_reference.py`` runs the same comparison as a
+test and skips while the data is absent.
 
 References
 ----------

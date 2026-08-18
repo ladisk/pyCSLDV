@@ -107,3 +107,6 @@ venv.bak/
 
 # VSCode
 .vscode/
+
+# Measured CSLDV datasets (see examples/measured_ods.ipynb); tens of MB per measurement
+examples/data/

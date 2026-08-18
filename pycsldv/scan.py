@@ -11,8 +11,12 @@ from fractions import Fraction
 from math import gcd
 
 import numpy as np
+from scipy.signal.windows import hann
 
-__all__ = ["lissajous", "sinusoidal_scan", "scan_period", "drive_signals"]
+from .demodulate import _projection
+
+__all__ = ["lissajous", "sinusoidal_scan", "scan_period", "drive_signals",
+           "normalize_scan", "dominant_frequency"]
 
 
 def lissajous(fx, fy, n_samples, fs, phase_x=0.0, phase_y=0.0, amplitude=(1.0, 1.0)):
@@ -67,6 +71,49 @@ def scan_period(fx, fy, max_denominator=10**6):
     common = Fraction(gcd(rx.numerator, ry.numerator),
                       rx.denominator * ry.denominator // gcd(rx.denominator, ry.denominator))
     return float(1 / common)
+
+
+def normalize_scan(position, f, fs):
+    """
+    Map a measured mirror position onto the normalized domain ``[-1, 1]``.
+
+    The reconstruction assumes a scan of the form ``cos(2 pi f t + phi)`` on
+    ``[-1, 1]``, whereas a measured mirror feedback signal is an offset
+    harmonic in volts or millimetres. The position is centred on its mean and
+    scaled by the amplitude of its component at the scan frequency, rather
+    than by its extremes, which are sensitive to noise and to cross-axis
+    coupling.
+
+    :param position: measured mirror position, in arbitrary units
+    :param f: scan frequency of this mirror [Hz]
+    :param fs: sampling frequency [Hz]
+    :return: ``(normalized, offset, amplitude)`` — the normalized position,
+        and the offset and amplitude that were removed, in the units of the
+        input, which together give the physical extent of the scan
+    """
+    position = np.asarray(position, float)
+    offset = position.mean()
+    amplitude = np.abs(_projection(position - offset, f, fs,
+                                   hann(len(position), sym=False)))
+    return (position - offset) / amplitude, offset, amplitude
+
+
+def dominant_frequency(signal, fs):
+    """
+    Frequency of the largest spectral component of a signal.
+
+    Useful to identify which measured channel scans at which frequency, as
+    the reconstruction has to be given the scan frequency belonging to each
+    mirror signal.
+
+    :param signal: time-domain signal
+    :param fs: sampling frequency [Hz]
+    :return: frequency of the largest component of the mean-removed
+        spectrum [Hz]
+    """
+    signal = np.asarray(signal, float)
+    spectrum = np.abs(np.fft.rfft(signal - signal.mean()))
+    return np.fft.rfftfreq(len(signal), 1 / fs)[spectrum.argmax()]
 
 
 def drive_signals(x, y, scale=(1.0, 1.0), offset=(0.0, 0.0)):
