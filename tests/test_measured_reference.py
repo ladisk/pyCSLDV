@@ -8,10 +8,14 @@ and compare the result with the ODS the original LabVIEW/MATLAB suite
 reconstructed from the same samples.
 
 The dataset is a 10 s measurement of a rectangular plate excited at 4527 Hz,
-provided by Joshua Bartlett (FAST Laboratory, Texas A&M University), to be
-published on Zenodo. It is tens of MB and is therefore not part of the
-repository: place the exported files in ``examples/data/`` to run these
-tests. They skip when the data is absent, so they never run in CI.
+recorded by Joshua Bartlett (FAST Laboratory, Texas A&M University) and
+published as part of the original suite at doi.org/10.5281/zenodo.22032252.
+It is 80 MB and is therefore not part of the repository: the ``dataset``
+fixture downloads it into ``examples/data/`` the first time these tests run
+and finds it there afterwards. Set ``PYCSLDV_NO_DOWNLOAD=1`` to forbid that,
+which makes them skip instead -- that is how a CI run avoids pulling 52 MB.
+They also skip if the download fails, so a machine without a network never
+sees a failure it cannot fix.
 
 The acquisition parameters below are not stored in the exported files; they
 are read from ``GUISettings_4527.png``, the screenshot of the front panel
@@ -25,13 +29,7 @@ import pytest
 
 import pycsldv
 
-DATA = Path(__file__).resolve().parents[1] / "examples" / "data"
-MEASUREMENT = DATA / "TimeResponse_4527.txt"
 REFERENCE = Path(__file__).resolve().parent / "reference" / "measured_ods_4527.npz"
-
-pytestmark = pytest.mark.skipif(
-    not MEASUREMENT.exists(),
-    reason=f"measured dataset not found; place the exported files in {DATA}")
 
 FS = 100_000.0      # sampling rate [S/s]
 FX, FY = 1.4, 20.0  # scan frequencies [Hz]
@@ -40,10 +38,24 @@ ORDER = 12          # spectral sideband quantity
 ROTATION = 1.60368  # sample-alignment angle recorded by the calibration [deg]
 
 
+@pytest.fixture(scope="session")
+def dataset():
+    """The files of the measurement, fetched from Zenodo if they are not
+    already on disk. Maps the published file name to its path; the copies
+    that circulated by e-mail as ``4527.xlsx`` and ``4527.mat`` are
+    recognized under their published names."""
+    from examples.zenodo_dataset import DatasetUnavailable, fetch_dataset
+
+    try:
+        return fetch_dataset()
+    except DatasetUnavailable as unavailable:
+        pytest.skip(str(unavailable))
+
+
 @pytest.fixture(scope="module")
-def measurement():
+def measurement(dataset):
     from examples.csldv_suite_export import read_time_response
-    return read_time_response(MEASUREMENT, fx=FX, fy=FY)
+    return read_time_response(dataset["TimeResponse_4527.txt"], fx=FX, fy=FY)
 
 
 @pytest.fixture(scope="module")
@@ -55,12 +67,12 @@ def coefficients(measurement):
 
 class TestMeasuredOds:
 
-    def test_matches_the_original_suite(self, coefficients):
+    def test_matches_the_original_suite(self, coefficients, dataset):
         """The shape agrees with the one the original suite reconstructed
         from the same measurement."""
         from examples.csldv_suite_export import read_ods_export
 
-        _, _, reference = read_ods_export(DATA / "4527.xlsx")
+        _, _, reference = read_ods_export(dataset["Reference_4527.xlsx"])
         points = np.linspace(-1, 1, reference.shape[0])
         _, _, ods = pycsldv.evaluate_ods(coefficients, resolution=len(points))
 
@@ -78,7 +90,7 @@ class TestMeasuredOds:
         assert coefficients.shape == recorded.shape
         assert np.allclose(coefficients, recorded, atol=1e-6 * np.abs(recorded).max())
 
-    def test_rotating_onto_the_mirror_axes_matches_the_suite(self, coefficients):
+    def test_rotating_onto_the_mirror_axes_matches_the_suite(self, coefficients, dataset):
         """pyCSLDV reconstructs against the scan parameters, which follow the
         specimen; the suite resamples its result onto the mirror axes, which
         tilts the shape. Turning ours by the angle measured from the mirror
@@ -95,12 +107,12 @@ class TestMeasuredOds:
         """
         from examples.csldv_suite_export import read_ods_export, read_time_response
 
-        _, x_mm, y_mm, _ = read_time_response(MEASUREMENT, fx=FX, fy=FY,
+        _, x_mm, y_mm, _ = read_time_response(dataset["TimeResponse_4527.txt"], fx=FX, fy=FY,
                                               normalize=False)
         angle = pycsldv.scan_rotation(x_mm, y_mm, FX, FY, FS)
         assert abs(np.degrees(angle)) == pytest.approx(1.89, abs=0.05)
 
-        reference = read_ods_export(DATA / "4527.xlsx")[2].real
+        reference = read_ods_export(dataset["Reference_4527.xlsx"])[2].real
         resolution = reference.shape[0]
 
         def agreement(turned_by, **kwargs):
@@ -130,7 +142,7 @@ class TestMeasuredScan:
         assert pycsldv.dominant_frequency(x, FS) == pytest.approx(FX)
         assert pycsldv.dominant_frequency(y, FS) == pytest.approx(FY)
 
-    def test_scan_extent(self):
+    def test_scan_extent(self, dataset):
         """The normalized domain corresponds to the scanned surface. The
         exported mm columns give a 71.0 mm x 14.5 mm region against a sample
         that is nominally 75 mm x 15 mm; the few per cent is the vertical
@@ -139,7 +151,7 @@ class TestMeasuredScan:
         normalized domain."""
         from examples.csldv_suite_export import read_time_response
 
-        _, x_mm, y_mm, _ = read_time_response(MEASUREMENT, fx=FX, fy=FY,
+        _, x_mm, y_mm, _ = read_time_response(dataset["TimeResponse_4527.txt"], fx=FX, fy=FY,
                                               normalize=False)
         _, _, x_amplitude = pycsldv.normalize_scan(x_mm, FX, FS)
         _, _, y_amplitude = pycsldv.normalize_scan(y_mm, FY, FS)
@@ -147,7 +159,7 @@ class TestMeasuredScan:
         assert 2 * x_amplitude == pytest.approx(71.0, abs=0.5)
         assert 2 * y_amplitude == pytest.approx(14.5, abs=0.5)
 
-    def test_rotation_appears_as_cross_axis_coupling(self):
+    def test_rotation_appears_as_cross_axis_coupling(self, dataset):
         """The suite rotates the commanded scan by the sample-alignment angle
         recorded during calibration, so that the scan follows the edges of a
         specimen that is not square to the mirror axes. A rotation mixes the
@@ -168,7 +180,7 @@ class TestMeasuredScan:
         """
         from examples.csldv_suite_export import read_time_response
 
-        _, x_mm, y_mm, _ = read_time_response(MEASUREMENT, fx=FX, fy=FY,
+        _, x_mm, y_mm, _ = read_time_response(dataset["TimeResponse_4527.txt"], fx=FX, fy=FY,
                                               normalize=False)
 
         def amplitude(signal, f):
@@ -194,7 +206,7 @@ class TestMeasuredScan:
         assert ROTATION < min(from_long, from_short)
         assert max(from_long, from_short) < 2.5
 
-    def test_commanded_pattern_carries_no_rotation(self):
+    def test_commanded_pattern_carries_no_rotation(self, dataset):
         """The rotation is absent from the ``LissajousPattern`` export, whose
         cross-terms sit at machine precision. That file holds the coordinates
         of the figure the suite plots for illustration, and the figure is
@@ -202,7 +214,7 @@ class TestMeasuredScan:
         followed -- unlike the feedback signals used above."""
         from examples.csldv_suite_export import read_scan_path
 
-        horizontal, vertical = read_scan_path(DATA / "LissajousPattern_4527.txt")
+        horizontal, vertical = read_scan_path(dataset["LissajousPattern_4527.txt"])
 
         for signal, own, other in ((horizontal, FX, FY), (vertical, FY, FX)):
             # also confirms this export shares the sampling rate of the

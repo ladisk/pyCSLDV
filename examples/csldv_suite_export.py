@@ -1,6 +1,6 @@
 """
 Readers for the measurement files written by the original LabVIEW/MATLAB
-CSLDV suite (Bartlett & Tarazaga, DOI 10.5281/zenodo.21301126).
+CSLDV suite (Bartlett & Tarazaga, DOI 10.5281/zenodo.22032252).
 
 These are an adapter for one specific acquisition front end, not part of the
 pyCSLDV package: the package works on plain arrays, and measured data will
@@ -8,6 +8,10 @@ reach it in whatever format the user's vibrometer and DAQ produce. The
 adapter lives here because it is what ``Showcase_measured.ipynb`` and
 ``tests/test_measured_reference.py`` need to run pyCSLDV on a real
 measurement. Copy it if you have data from the same suite.
+
+The files themselves are published with the suite and are fetched on demand
+by :mod:`examples.zenodo_dataset`, so neither the notebook nor the tests
+need them to be placed by hand.
 
 A measurement is exported as a set of files sharing the excitation frequency
 as their name, e.g. for 4527 Hz:
@@ -25,7 +29,7 @@ as their name, e.g. for 4527 Hz:
     rotation is applied (see the note on rotation below). For the path the
     laser actually followed, use the mirror feedback columns of
     ``TimeResponse``.
-``4527.xlsx``
+``Reference_4527.xlsx``
     The processed results of the suite: the reconstructed ODS on a regular
     grid (``ODS_X``, ``ODS_Y``, ``ODS_Z_Real``, ``ODS_Z_Imag``) and the
     averaged FRF (``FRF_Freq``, ``FRF_Mag``), one column per sheet, without
@@ -35,9 +39,13 @@ as their name, e.g. for 4527 Hz:
     frequencies, the excitation frequency and the sideband count have to be
     read from it, as they are not stored in the exported files.
 
-The ``.mat`` file of the same name holds the contents of the workbook as
-MATLAB ``table`` objects (MCOS), which cannot be read without MATLAB; use
-the workbook instead.
+``Reference_4527.mat``
+    The contents of the workbook as MATLAB ``table`` objects (MCOS), which
+    cannot be read without MATLAB; use the workbook instead.
+
+The last two are named ``4527.xlsx`` and ``4527.mat`` in the copies that
+circulated by e-mail before the dataset was published;
+:func:`examples.zenodo_dataset.dataset_file` accepts either name.
 
 .. warning::
     The axis naming is not consistent across these files: in the dataset the

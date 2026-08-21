@@ -26,5 +26,10 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Test with pytest
+        env:
+          # The measured dataset is 52 MB on Zenodo; the tests that use it
+          # download it on demand. Forbid that here, so they skip as they
+          # did before, rather than fetching it on every push.
+          PYCSLDV_NO_DOWNLOAD: "1"
         run: |
           pytest
