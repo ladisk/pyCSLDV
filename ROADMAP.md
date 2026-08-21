@@ -6,7 +6,10 @@
 - [x] Enable setting polynomial order per mode and per direction
 - [x] Support multiple sensors. For example for 3D Scanning LDV. The demodulation function takes real-valued velocity signal of shape
         (n_samples,) or (locations, n_samples)
-- [ ] Update Showcase.ipynb to explain updated functionalities
+- [x] Update Showcase.ipynb to explain updated functionalities. Section 5 covers the
+      global least-squares fit (several modes, overlapping sidebands, complex poles,
+      order per mode and direction, several sensors, line scans) and section 6 the
+      rotation of a shape onto other axes
 - [ ] evaluate_ods and plot_ods take a single coefficient array, so the list a
       multimodal demodulation returns has to be indexed by the caller
 - [ ] rotate_ods takes a single 2D matrix, not the stacked multi-sensor or
