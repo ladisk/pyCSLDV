@@ -4,7 +4,7 @@ title: "pyCSLDV: Continuous scanning laser Doppler vibrometry in Python"
 type: software
 abstract: >-
   Python reimplementation of the CSLDV Vibration Measurement & Simulation
-  Suite (Bartlett & Tarazaga, DOI 10.5281/zenodo.21301126, CC-BY-4.0),
+  Suite (Bartlett & Tarazaga, DOI 10.5281/zenodo.22032252, CC-BY-4.0),
   covering Lissajous scan design, virtual CSLDV experiments and ODS
   reconstruction by sideband demodulation. The original material has been
   modified; see the README for the changes. The initial implementation was
@@ -39,8 +39,13 @@ references:
         given-names: Pablo
         orcid: "https://orcid.org/0000-0002-5443-8484"
         affiliation: "Texas A&M University"
-    doi: 10.5281/zenodo.21301126
-    url: "https://zenodo.org/records/21301126"
+    doi: 10.5281/zenodo.22032252
+    url: "https://zenodo.org/records/22032252"
     license: CC-BY-4.0
-    version: "1.0"
+    version: "1.1"
     year: 2026
+    notes: >-
+      Version 1.1 adds the measured 4527 Hz dataset that
+      tests/test_measured_reference.py and Showcase_measured.ipynb run on.
+      The concept DOI 10.5281/zenodo.21301125 always resolves to the latest
+      version.

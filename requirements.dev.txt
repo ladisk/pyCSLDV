@@ -7,3 +7,6 @@ pytest
 build
 sphinx-copybutton
 sphinx-book-theme
+# running the notebooks (Showcase.ipynb, Showcase_measured.ipynb)
+nbconvert
+ipykernel

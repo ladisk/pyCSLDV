@@ -25,9 +25,11 @@ pyCSLDV is an independent Python reimplementation of the *Continuous
 Scanning Laser Doppler Vibrometry (CSLDV) Vibration Measurement &
 Simulation Suite* (LabVIEW/MATLAB) by Joshua Bartlett and Pablo Tarazaga,
 FAST Laboratory, Texas A&M University, published under the CC-BY-4.0
-license at `zenodo.org/records/21301126
-<https://zenodo.org/records/21301126>`_ (DOI: `10.5281/zenodo.21301126
-<https://doi.org/10.5281/zenodo.21301126>`_).
+license at `zenodo.org/records/22032252
+<https://zenodo.org/records/22032252>`_ (DOI: `10.5281/zenodo.22032252
+<https://doi.org/10.5281/zenodo.22032252>`_; the concept DOI
+`10.5281/zenodo.21301125 <https://doi.org/10.5281/zenodo.21301125>`_ always
+resolves to the latest version).
 
 The measurement principle, the sideband-demodulation processing chain and
 the compensation of the mirror inertial lag follow the original suite, and
@@ -156,16 +158,22 @@ sideband spectrum, ODS reconstruction and MAC validation — see the
 `Showcase notebook <Showcase.ipynb>`_. The same workflow on a real
 measurement, compared with the ODS the original suite reconstructed from the
 same samples, is in `Showcase_measured.ipynb <Showcase_measured.ipynb>`_.
-That dataset is not part of the repository and will be published separately
-on Zenodo; ``tests/test_measured_reference.py`` runs the same comparison as a
-test and skips while the data is absent.
+That dataset is published with the original suite and is not part of this
+repository: it is 80 MB, and both the notebook and
+``tests/test_measured_reference.py`` download it from Zenodo the first time
+they need it, into ``examples/data/``. Set ``PYCSLDV_NO_DOWNLOAD=1`` to
+forbid that — the tests then skip instead of fetching 52 MB, which is what a
+continuous-integration run wants — and ``PYCSLDV_DATA`` to keep the files
+somewhere else. The download is also skipped, rather than failed, when there
+is no network.
 
 References
 ----------
 
 - J. Bartlett, P. Tarazaga: Continuous Scanning Laser Doppler Vibrometry
-  (CSLDV) Vibration Measurement & Simulation Suite, Zenodo, 2026,
-  DOI: 10.5281/zenodo.21301126.
+  (CSLDV) Vibration Measurement & Simulation Suite, version 1.1, Zenodo,
+  2026, DOI: 10.5281/zenodo.22032252. Version 1.1 adds the measured dataset
+  the tests and ``Showcase_measured.ipynb`` run on.
 - A. B. Stanbridge, D. J. Ewins: Modal testing using a scanning laser
   Doppler vibrometer, Mechanical Systems and Signal Processing 13(2),
   1999, 255–270.
