@@ -26,7 +26,7 @@ import numpy as np
 from numpy.polynomial import chebyshev
 from scipy.signal.windows import hann
 
-__all__ = ["demodulate_ods", "evaluate_ods", "align_phase", "reference_phase", "demodulate_ods_1d"]
+__all__ = ["demodulate_ods", "evaluate_ods", "align_phase", "reference_phase", "demodulate_ods_1d", "demodulate_ods_2d"]
 
 
 def _projection(signal, f, fs, window = None):
@@ -65,119 +65,134 @@ def reference_phase(signal, f, fs, window=None):
     return np.angle(_projection(signal, f, fs, window))
 
 def demodulate_ods_1d(
-    velocity, fs, fn, fx, order=10, phi_x=0.0
+    velocity, fs, fn=None, fx=0.0, order=10, phi_x=0.0, poles=None
 ):
     """
-    Estimate Chebyshev coefficients of one or more scanned modes
-    using linear least squares.
+    Estimate complex Chebyshev coefficients using a global linear system,
+    incorporating complex continuous-time poles (damping + frequency).
 
-    The measurement model is
-
-        X = Phi @ T
-
-    where ``T`` contains the temporal sideband basis functions and
-    ``Phi`` contains the Chebyshev coefficients of each mode.
-
-    For multiple modes, the temporal basis is stacked vertically by
-    mode. The resulting coefficient matrix is then split into one
-    Chebyshev coefficient array per mode.
-
-    :param velocity: measured velocity signal(s), shape
-        ``(locations, time)`` or simply ``(time,)``
+    :param velocity: real-valued velocity signal, shape (n_samples,) or (locations, n_samples)
     :param fs: sampling frequency [Hz]
-    :param fn: response frequency [Hz], scalar or array
+    :param fn: response frequencies [Hz], scalar or array. Used if poles is None.
     :param fx: scan frequency [Hz]
-    :param order: maximum Chebyshev order, scalar or array matching
-        ``fn``
-    :param phi_x: scan-path phase [rad]
-    :return: Chebyshev coefficients. For a single mode, returns an
-        array of shape ``(locations, P+1)`` or ``(P+1,)`` for a
-        single measurement location. For multiple modes, returns a
-        list containing one such array per mode.
+    :param order: maximum Chebyshev order, scalar or array matching `poles`/`fn`
+    :param phi_x: scan phase offset [rad]
+    :param poles: complex poles lambda = sigma + j*omega (rad/s), scalar or array-like
+    :return: Complex Chebyshev coefficients per mode.
     """
     velocity = np.asarray(velocity)
 
     if velocity.ndim == 1:
-        velocity = velocity[None, :]
+        velocity = velocity[None, :]  # Shape: (1, n_samples)
         unpack_location = True
     else:
         unpack_location = False
 
-    fn = np.atleast_1d(fn)
+    # Standardize input poles / fn
+    if poles is None:
+        if fn is None:
+            raise ValueError("Either `fn` or `poles` must be provided.")
+        fn = np.atleast_1d(fn)
+        poles = 2j * np.pi * fn
+    else:
+        poles = np.atleast_1d(poles)
+
     order = np.atleast_1d(order)
 
-    if len(fn) != len(order):
-        raise ValueError(
-            "`fn` and `order` must have the same length."
-        )
+    if len(order) == 1 and len(poles) > 1:
+        order = np.full_like(poles, order[0], dtype=int)
+
+    if len(poles) != len(order):
+        raise ValueError("`poles` and `order` must have the same length.")
 
     n_locations, n_samples = velocity.shape
     t = np.arange(n_samples) / fs
 
-    temporal_blocks = []
+    theta_x = 2.0 * np.pi * fx * t + phi_x
 
-    for f_mode, P in zip(fn, order):
+    real_blocks = []
+    imag_blocks = []
+    mode_info = []
+
+    real_col_idx = 0
+    imag_col_idx = 0
+
+    for pole, P in zip(poles, order):
         P = int(P)
-        p = np.arange(P + 1)
+        p = np.arange(P + 1)[:, None]  # Shape: (P + 1, 1)
 
-        omega_pos = 2 * np.pi * (f_mode + p * fx)
-        omega_neg = 2 * np.pi * (f_mode - p * fx)
+        T_p = np.cos(p * theta_x)
+        nc = P + 1
 
-        T_mode = 0.5 * (
-            np.cos(
-                omega_pos[:, None] * t
-                + p[:, None] * phi_x
-            )
-            +
-            np.cos(
-                omega_neg[:, None] * t
-                - p[:, None] * phi_x
-            )
-        )
+        sigma = pole.real
+        omega = pole.imag  # Frequency in rad/s
 
-        temporal_blocks.append(T_mode)
+        # Exponential decay/growth envelope
+        decay = np.exp(sigma * t)
 
-    # Stack temporal bases vertically by mode:
-    #
-    # T = [T_mode_1]
-    #     [T_mode_2]
-    #       ...
-    T = np.vstack(temporal_blocks)
+        if np.isclose(omega, 0.0):
+            # Purely real / DC component (omega = 0)
+            real_blocks.append(T_p * decay)
 
-    # Solve
-    #
-    # X.T = T.T @ Phi.T
-    #
-    # Result:
-    # Phi.shape = (locations, sum(P + 1))
-    Phi = np.linalg.lstsq(
-        T.T,
-        velocity.T,
-        rcond=None
-    )[0].T
+            mode_info.append({
+                'nc': nc,
+                'is_dc': True,
+                'real_col': real_col_idx,
+                'imag_col': None
+            })
+            real_col_idx += nc
+        else:
+            # AC component with damping
+            real_blocks.append(T_p * decay * np.cos(omega * t))
+            imag_blocks.append(T_p * decay * np.sin(omega * t))
 
-    # Split the coefficient matrix into one block per mode.
+            mode_info.append({
+                'nc': nc,
+                'is_dc': False,
+                'real_col': real_col_idx,
+                'imag_col': imag_col_idx
+            })
+            real_col_idx += nc
+            imag_col_idx += nc
+
+    # Stack only active basis blocks
+    A_real_all = np.vstack(real_blocks)
+
+    if imag_blocks:
+        A_imag_all = np.vstack(imag_blocks)
+        # v(t) = Re(A) @ Re(C) - Im(A) @ Im(C)
+        A_real_system = np.hstack([A_real_all.T, -A_imag_all.T])
+    else:
+        A_real_system = A_real_all.T
+
+    # Solve full linear least-squares system
+    Theta, _, _, _ = np.linalg.lstsq(A_real_system, velocity.T, rcond=None)
+    Theta = Theta.T
+
+    # Separate real and imaginary solution blocks
+    Re_C_all = Theta[:, :real_col_idx]
+    Im_C_all = Theta[:, real_col_idx:] if imag_blocks else None
+
+    # Reconstruct mode-by-mode complex coefficient arrays
     Phi_vec = []
-    column = 0
+    for info in mode_info:
+        nc = info['nc']
+        r_idx = info['real_col']
 
-    for P in order:
-        n_coefficients = int(P) + 1
+        re_mode = Re_C_all[:, r_idx : r_idx + nc]
 
-        phi_mode = Phi[:, column:column + n_coefficients]
-        Phi_vec.append(phi_mode)
+        if info['is_dc']:
+            im_mode = np.zeros_like(re_mode)
+        else:
+            i_idx = info['imag_col']
+            im_mode = Im_C_all[:, i_idx : i_idx + nc]
 
-        column += n_coefficients
+        Phi_vec.append(re_mode + 1j * im_mode)
 
-    # For a single measurement location, remove the location dimension.
     if unpack_location:
         Phi_vec = [phi[0] for phi in Phi_vec]
 
-    # Preserve the convenient scalar-input behaviour.
-    if len(Phi_vec) == 1:
-        return Phi_vec[0]
-
-    return Phi_vec
-
+    return Phi_vec[0] if len(Phi_vec) == 1 else Phi_vec
 
 def demodulate_ods(velocity, x, y, fs, fx, fy, fz, order=10):
     """
@@ -234,21 +249,216 @@ def demodulate_ods(velocity, x, y, fs, fx, fy, fz, order=10):
             coefficients[n, m] = np.mean(estimates)
     return coefficients
 
+def demodulate_ods_2d(
+    velocity, fs, fx, fy, fn=None, order=10,
+    phi_x=0.0, phi_y=0.0, poles=None
+):
+    """
+    Estimate complex 2D Chebyshev coefficients using a global linear
+    least-squares system, incorporating complex continuous-time poles
+    (damping + frequency).
+
+    :param velocity: real-valued velocity signal, shape
+        (n_samples,) or (locations, n_samples)
+    :param fs: sampling frequency [Hz]
+    :param fx: x scan frequency [Hz]
+    :param fy: y scan frequency [Hz]
+    :param fn: response frequencies [Hz], scalar or array. Used if
+        poles is None.
+    :param order: Chebyshev order. Can be:
+        - scalar: same x/y order for every mode
+        - array of length n_modes: same x/y order per mode
+        - array of shape (n_modes, 2): [order_x, order_y] per mode
+        - array of shape (2, n_modes): accepted and transposed
+    :param phi_x: x scan-path phase [rad]
+    :param phi_y: y scan-path phase [rad]
+    :param poles: complex poles lambda = sigma + j*omega [rad/s],
+        scalar or array-like.
+    :return: Complex Chebyshev coefficient matrices per mode.
+    """
+    velocity = np.asarray(velocity)
+
+    if velocity.ndim == 1:
+        velocity = velocity[None, :]
+        unpack_location = True
+    else:
+        unpack_location = False
+
+    # Standardize input poles / fn
+    if poles is None:
+        if fn is None:
+            raise ValueError("Either `fn` or `poles` must be provided.")
+        fn = np.atleast_1d(fn)
+        poles = 2j * np.pi * fn
+    else:
+        poles = np.atleast_1d(poles)
+
+    n_modes = len(poles)
+
+    # Standardize order to shape (n_modes, 2)
+    order = np.asarray(order)
+
+    if order.ndim == 0:
+        order = np.full((n_modes, 2), int(order))
+
+    elif order.ndim == 1:
+        if len(order) == 1:
+            order = np.full((n_modes, 2), int(order[0]))
+        elif len(order) == n_modes:
+            order = np.column_stack((order, order))
+        elif n_modes == 1 and len(order) == 2:
+            order = order[None, :]
+        else:
+            raise ValueError(
+                "`order` must be a scalar, have length n_modes, "
+                "or contain two values for a single mode."
+            )
+
+    elif order.ndim == 2:
+        if order.shape == (n_modes, 2):
+            pass
+        elif order.shape == (2, n_modes):
+            order = order.T
+        else:
+            raise ValueError(
+                "`order` must have shape (n_modes, 2) or (2, n_modes)."
+            )
+
+    else:
+        raise ValueError("`order` must be scalar, 1D, or 2D.")
+
+    order = order.astype(int)
+
+    if np.any(order < 0):
+        raise ValueError("Chebyshev orders must be non-negative.")
+
+    n_locations, n_samples = velocity.shape
+    t = np.arange(n_samples) / fs
+
+    theta_x = 2.0 * np.pi * fx * t + phi_x
+    theta_y = 2.0 * np.pi * fy * t + phi_y
+
+    real_blocks = []
+    imag_blocks = []
+    mode_info = []
+
+    real_col_idx = 0
+    imag_col_idx = 0
+
+    for pole, (Px, Py) in zip(poles, order):
+        Px = int(Px)
+        Py = int(Py)
+
+        x_basis = np.cos(np.arange(Px + 1)[:, None] * theta_x[None, :])
+        y_basis = np.cos(np.arange(Py + 1)[:, None] * theta_y[None, :])
+        basis = (x_basis[:, None, :] * y_basis[None, :, :]).reshape((Px + 1) * (Py + 1), n_samples)
+
+        sigma = pole.real
+        omega = pole.imag
+        decay = np.exp(sigma * t)
+
+        nc = (Px + 1) * (Py + 1)
+
+        if np.isclose(omega, 0.0):
+            real_blocks.append(basis * decay[None, :])
+
+            mode_info.append({
+                "shape": (Px, Py),
+                "nc": nc,
+                "is_dc": True,
+                "real_col": real_col_idx,
+                "imag_col": None,
+            })
+
+            real_col_idx += nc
+
+        else:
+            real_blocks.append(basis * (decay * np.cos(omega * t))[None, :])
+            imag_blocks.append(basis * (decay * np.sin(omega * t))[None, :])
+
+            mode_info.append({
+                "shape": (Px, Py),
+                "nc": nc,
+                "is_dc": False,
+                "real_col": real_col_idx,
+                "imag_col": imag_col_idx,
+            })
+
+            real_col_idx += nc
+            imag_col_idx += nc
+
+    A_real = np.vstack(real_blocks).T
+
+    A_imag = np.zeros((n_samples, imag_col_idx))
+
+    imag_block_idx = 0
+    for info in mode_info:
+        if not info["is_dc"]:
+            nc = info["nc"]
+            col = info["imag_col"]
+            A_imag[:, col:col + nc] = imag_blocks[imag_block_idx].T
+            imag_block_idx += 1
+
+    A = np.hstack([A_real, -A_imag])
+
+    Theta = np.linalg.lstsq(A, velocity.T, rcond=None)[0].T
+
+    Re_C_all = Theta[:, :real_col_idx]
+    Im_C_all = Theta[:, real_col_idx:]
+
+    Phi_vec = []
+
+    for info in mode_info:
+        Px, Py = info["shape"]
+        nc = info["nc"]
+        r_idx = info["real_col"]
+
+        re_mode = Re_C_all[:, r_idx:r_idx + nc]
+
+        if info["is_dc"]:
+            im_mode = np.zeros_like(re_mode)
+        else:
+            i_idx = info["imag_col"]
+            im_mode = Im_C_all[:, i_idx:i_idx + nc]
+
+        phi_mode = (re_mode + 1j * im_mode).reshape(n_locations, Px + 1, Py + 1)
+        Phi_vec.append(phi_mode)
+
+    if unpack_location:
+        Phi_vec = [phi[0] for phi in Phi_vec]
+
+    return Phi_vec[0] if len(Phi_vec) == 1 else Phi_vec
 
 def evaluate_ods(coefficients, resolution=100):
     """
     Evaluate the ODS Chebyshev series on a regular grid.
 
-    :param coefficients: complex coefficient matrix from :func:`demodulate_ods`
-    :param resolution: number of grid points per direction
-    :return: ``(x_grid, y_grid, z)`` where ``z`` is the complex deflection
-        shape; all arrays have shape ``(resolution, resolution)``
-    """
-    points = np.linspace(-1, 1, resolution)
-    x_grid, y_grid = np.meshgrid(points, points, indexing="ij")
-    z = chebyshev.chebgrid2d(points, points, coefficients)
-    return x_grid, y_grid, z
+    For a 1D coefficient vector of shape ``(P + 1,)``, returns
+    ``(x, z)`` where both arrays have shape ``(resolution,)``.
 
+    For a 2D coefficient matrix of shape ``(Px + 1, Py + 1)``, returns
+    ``(x_grid, y_grid, z)`` where all arrays have shape
+    ``(resolution, resolution)``.
+
+    :param coefficients: complex Chebyshev coefficients from
+        :func:`demodulate_ods`
+    :param resolution: number of grid points per direction
+    """
+    coefficients = np.asarray(coefficients)
+    points = np.linspace(-1, 1, resolution)
+
+    if coefficients.ndim == 1:
+        z = chebyshev.chebval(points, coefficients)
+        return points, z
+
+    if coefficients.ndim == 2:
+        x_grid, y_grid = np.meshgrid(points, points, indexing="ij")
+        z = chebyshev.chebgrid2d(points, points, coefficients)
+        return x_grid, y_grid, z
+
+    raise ValueError(
+        "`coefficients` must be a 1D or 2D array."
+    )
 
 def align_phase(coefficients):
     """
@@ -261,6 +471,10 @@ def align_phase(coefficients):
     :param coefficients: complex coefficient matrix
     :return: phase-aligned coefficient matrix
     """
+
+    if isinstance(coefficients, (list, tuple)):
+        return [align_phase(c) for c in coefficients]
+
     coefficients = np.asarray(coefficients)
     dominant = coefficients.flat[np.argmax(np.abs(coefficients))]
     return coefficients * np.exp(-1j * np.angle(dominant))

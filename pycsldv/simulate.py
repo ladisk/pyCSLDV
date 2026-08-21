@@ -57,7 +57,7 @@ def plate_mode(p, q):
                 * np.sin(q * np.pi * (np.asarray(y) + 1) / 2))
     return shape
 
-def plate_frequency(p, q, Lx, Ly, E, rho, h, nu = 0.3):
+def plate_frequency(p, q, Lx =  0.38, Ly = 0.7, E= 2.1e11, rho= 7800, h= 0.003, nu = 0.3):
     """
     Natural frequency of a simply supported rectangular plate.
 
