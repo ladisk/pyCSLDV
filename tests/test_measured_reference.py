@@ -78,6 +78,44 @@ class TestMeasuredOds:
         assert coefficients.shape == recorded.shape
         assert np.allclose(coefficients, recorded, atol=1e-6 * np.abs(recorded).max())
 
+    def test_rotating_onto_the_mirror_axes_matches_the_suite(self, coefficients):
+        """pyCSLDV reconstructs against the scan parameters, which follow the
+        specimen; the suite resamples its result onto the mirror axes, which
+        tilts the shape. Turning ours by the angle measured from the mirror
+        feedback moves it onto theirs, which is what closes the remaining gap
+        between the two reconstructions.
+
+        The rotation that fits is the one on the *normalized* domain, not on
+        the physical surface: an aspect-aware rotation of a scan five times
+        longer than it is wide tilts the shape five times as far and fits
+        worse. So the suite appears to rotate its sampling grid without
+        allowing for the two axes being scaled differently -- which is
+        consistent with the over-compensation its author reports, and is the
+        reason ``aspect`` defaults to 1 rather than being required.
+        """
+        from examples.csldv_suite_export import read_ods_export, read_time_response
+
+        _, x_mm, y_mm, _ = read_time_response(MEASUREMENT, fx=FX, fy=FY,
+                                              normalize=False)
+        angle = pycsldv.scan_rotation(x_mm, y_mm, FX, FY, FS)
+        assert abs(np.degrees(angle)) == pytest.approx(1.89, abs=0.05)
+
+        reference = read_ods_export(DATA / "4527.xlsx")[2].real
+        resolution = reference.shape[0]
+
+        def agreement(turned_by, **kwargs):
+            c = pycsldv.rotate_ods(coefficients, turned_by, **kwargs)
+            return pycsldv.mac(reference, pycsldv.evaluate_ods(c, resolution)[2].real.T)
+
+        as_reconstructed = agreement(0.0)
+        onto_the_mirrors = agreement(-angle)
+        the_wrong_way = agreement(angle)
+        physically = agreement(-angle, aspect=4.878)
+
+        assert onto_the_mirrors > 0.995
+        assert onto_the_mirrors > as_reconstructed > the_wrong_way
+        assert onto_the_mirrors > physically
+
     def test_shape_is_essentially_real(self, coefficients):
         """A normal mode: after align_phase the imaginary part is small."""
         assert np.abs(coefficients.imag).max() < 0.05 * np.abs(coefficients).max()

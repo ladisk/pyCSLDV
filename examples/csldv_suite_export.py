@@ -62,12 +62,21 @@ the workbook instead.
     calibration is known to over-compensate: in the 4527 Hz dataset the
     coupling implies 1.8 deg to 2.0 deg against a recorded 1.60368 deg.
 
-    pyCSLDV reconstructs in the scan frame and has no counterpart to the
-    rotation. This costs little: :func:`pycsldv.normalize_scan` takes the
-    amplitude at the scan frequency, so the coupling does not disturb the
-    normalization, and for the small angles used in practice the two frames
-    stay close -- the 4527 Hz reconstruction reaches MAC > 0.99 against the
-    suite's own rotated ODS.
+    pyCSLDV reconstructs in the scan frame, which follows the specimen, and
+    the coupling does not disturb it: :func:`pycsldv.normalize_scan` and the
+    demodulation both read only the component at the scan frequency. To
+    compare with the suite's export, which is on the mirror axes, measure
+    the angle with :func:`pycsldv.scan_rotation` and turn the shape with
+    :func:`pycsldv.rotate_ods`::
+
+        angle = pycsldv.scan_rotation(x_mm, y_mm, fx, fy, fs)
+        on_the_mirror_axes = pycsldv.rotate_ods(coefficients, -angle)
+
+    For the 4527 Hz dataset that lifts the agreement with the suite from
+    MAC 0.9905 to 0.9955. The fit wants the rotation on the normalized
+    domain rather than on the physical surface (``aspect=1``, the default),
+    which suggests the suite rotates its grid without allowing for the two
+    axes being scaled differently.
 """
 
 import warnings

@@ -1,5 +1,8 @@
+import warnings
+
 import numpy as np
 import pytest
+from numpy.polynomial.chebyshev import chebval2d
 
 import pycsldv
 
@@ -86,3 +89,85 @@ class TestEvaluate:
         aligned = pycsldv.align_phase(c)
         assert np.allclose(aligned.imag, 0.0, atol=1e-12)
         assert aligned[0, 0] == pytest.approx(1.0)
+
+
+class TestRotate:
+    """Expressing a reconstructed shape in a rotated frame."""
+
+    C = np.array([[0.2, 0.0, 0.5, 0.0],
+                  [0.0, 0.0, 1.0, 0.0],
+                  [0.3, 0.0, 0.0, 0.0],
+                  [0.0, -0.7, 0.0, 0.0]])
+
+    def test_zero_angle_is_the_identity(self):
+        rotated = pycsldv.rotate_ods(self.C, 0.0)
+        assert np.allclose(rotated[:4, :4], self.C, atol=1e-12)
+        assert np.allclose(rotated[4:, :], 0.0) and np.allclose(rotated[:, 4:], 0.0)
+
+    def test_matches_direct_substitution(self):
+        """The rotated coefficients describe the same shape, evaluated at
+        rotated coordinates. Checked well inside the domain, where no
+        extrapolation is involved."""
+        angle = np.radians(17.0)
+        points = np.linspace(-0.6, 0.6, 25)
+        u, v = np.meshgrid(points, points, indexing="ij")
+        direct = chebval2d(u * np.cos(angle) - v * np.sin(angle),
+                           u * np.sin(angle) + v * np.cos(angle), self.C)
+
+        rotated = chebval2d(u, v, pycsldv.rotate_ods(self.C, angle))
+        assert np.allclose(direct, rotated, atol=1e-12)
+
+    def test_aspect_stretches_the_rotation(self):
+        """On a scan that is longer than it is wide, a rotation of the
+        physical surface is not a rotation of the normalized domain: it
+        tilts the shape by the aspect ratio more."""
+        angle, aspect = np.radians(2.0), 5.0
+        points = np.linspace(-0.6, 0.6, 25)
+        u, v = np.meshgrid(points, points, indexing="ij")
+        direct = chebval2d(u * np.cos(angle) - v * np.sin(angle) / aspect,
+                           u * np.sin(angle) * aspect + v * np.cos(angle), self.C)
+
+        rotated = chebval2d(u, v, pycsldv.rotate_ods(self.C, angle, aspect=aspect))
+        assert np.allclose(direct, rotated, atol=1e-12)
+        # and it is a different shape from the isotropic rotation
+        assert not np.allclose(rotated, chebval2d(u, v, pycsldv.rotate_ods(self.C, angle)))
+
+    def test_round_trip(self):
+        angle = np.radians(23.0)
+        there = pycsldv.rotate_ods(self.C, angle)
+        back = pycsldv.rotate_ods(there, -angle)
+        assert np.allclose(back[:4, :4], self.C, atol=1e-10)
+        assert np.abs(back[4:, :]).max() < 1e-10
+
+    def test_complex_coefficients_are_preserved(self):
+        """The reconstruction is complex, and a rotation acts on the shape,
+        not on the phase."""
+        coefficients = self.C * np.exp(1j * 0.8)
+        rotated = pycsldv.rotate_ods(coefficients, np.radians(11.0))
+        assert np.iscomplexobj(rotated)
+        assert np.allclose(rotated, pycsldv.rotate_ods(self.C, np.radians(11.0))
+                           * np.exp(1j * 0.8), atol=1e-12)
+
+    def test_degree_grows(self):
+        """A rotation mixes the directions, so the tensor-product degree
+        grows even though the total degree does not."""
+        assert pycsldv.rotate_ods(np.zeros((5, 3)), 0.4).shape == (7, 7)
+
+    def test_warns_when_the_domain_is_left(self):
+        """A slender scan turned through a large angle pushes the corners
+        far outside the domain the series was fitted on."""
+        with pytest.warns(UserWarning, match="extrapolates"):
+            pycsldv.rotate_ods(self.C, np.radians(10.0), aspect=5.0)
+
+    def test_rejects_a_shape_it_cannot_rotate(self):
+        with pytest.raises(ValueError, match="two-dimensional"):
+            pycsldv.rotate_ods([1.0, 2.0, 3.0], 0.3)
+        with pytest.raises(ValueError, match="positive extent ratio"):
+            pycsldv.rotate_ods(self.C, 0.3, aspect=0.0)
+
+    def test_no_warning_for_a_small_rotation(self):
+        warnings.simplefilter("error")
+        try:
+            pycsldv.rotate_ods(self.C, np.radians(2.0))
+        finally:
+            warnings.resetwarnings()
