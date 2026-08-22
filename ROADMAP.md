@@ -27,4 +27,12 @@
       cover the least-squares reconstruction; the rotation of a shape onto another
       set of axes is in tests/test_demodulate.py
 
-Note: The new implementation takes the mirror lags as an inputs. This replaces the align_phase function
+Note on the two phases, which are easy to confuse. The *scan* phase is the
+inertial lag of the mirrors: it is an input (`phi_x`, `phi_y`), measured from
+the mirror feedback signals with `reference_phase`, and the reconstruction
+needs it to know where the laser was at each sample. The *response* phase is
+the arbitrary global phase of the vibration relative to the start of the
+acquisition; it is not an input and cannot be, and `align_phase` removes it
+afterwards so the real part of the shape can be compared against a real mode
+shape. Taking the mirror lags as inputs therefore replaced guessing the scan
+phase, not `align_phase`, which is still needed and still exported.

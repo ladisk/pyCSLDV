@@ -108,5 +108,11 @@ venv.bak/
 # VSCode
 .vscode/
 
-# Measured CSLDV datasets (see examples/measured_ods.ipynb); tens of MB per measurement
+# Measured CSLDV datasets, fetched on demand by examples/zenodo_dataset.py
+# (Showcase_measured.ipynb and tests/test_measured_reference.py use them);
+# tens of MB per measurement
 examples/data/
+
+# Resolved dependency versions. This is a library, tested against a range
+# of versions rather than one frozen set, so the lock file is not shared.
+uv.lock
