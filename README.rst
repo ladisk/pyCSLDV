@@ -194,9 +194,13 @@ puts its carrier exactly on the first mode's ``n = 2`` sideband, where the
 projection cannot tell the two apart while the global fit still recovers
 both.
 
-The design matrix is ``n_samples`` by ``2 sum_k (Px + 1)(Py + 1)`` and is
-formed in full, so a long record reconstructed to a high order is expensive:
-10 s at 100 kS/s and order 12 needs about 2.7 GB.
+The design matrix is ``n_samples`` by ``2 sum_k (Px + 1)(Py + 1)``, which for
+a long record is larger than everything else in the problem put together, so
+it is never held whole: it is built a block of rows at a time and only the
+normal equations are accumulated. Those are as wide as the unknowns and no
+wider, so the memory does not follow the length of the record. Forming them
+squares the condition number of the system, which is one more reason the fit
+reports how well the scan determines it.
 
 Measured data
 -------------

@@ -443,3 +443,77 @@ class TestStackedResults:
         _, ax = plt.subplots()
         with pytest.raises(ValueError, match="single shape"):
             pycsldv.plot_ods(estimated, ax=ax)
+
+
+class TestChunking:
+    """The design matrix is never held whole: it is built a block of rows at
+    a time and only the normal equations are accumulated. The block size is
+    an implementation detail and must not be visible in the result."""
+
+    def measurement(self):
+        _, x, y = pycsldv.lissajous(FX, FY, N, FS)
+        rng = np.random.default_rng(0)
+        return pycsldv.simulate_response(pycsldv.plate_mode(2, 3), FZ, x, y, FS,
+                                         noise_std=0.05, rng=rng)
+
+    @pytest.mark.parametrize("chunk_bytes", [1 << 10, 1 << 16, 1 << 30])
+    def test_the_block_size_does_not_change_the_result(self, monkeypatch,
+                                                       chunk_bytes):
+        """From one row at a time to the whole record at once."""
+        velocity = self.measurement()
+        reference = pycsldv.demodulate_ods_2d(velocity, FS, FX, FY, fn=FZ, order=6)
+
+        monkeypatch.setattr(pycsldv.demodulate, "_CHUNK_BYTES", chunk_bytes)
+        assert np.allclose(
+            pycsldv.demodulate_ods_2d(velocity, FS, FX, FY, fn=FZ, order=6),
+            reference, atol=1e-10)
+
+    def test_a_line_scan_chunks_the_same_way(self, monkeypatch):
+        velocity = self.measurement()
+        reference = pycsldv.demodulate_ods_1d(velocity, FS, fn=FZ, fx=FX, order=5)
+
+        monkeypatch.setattr(pycsldv.demodulate, "_CHUNK_BYTES", 1 << 10)
+        assert np.allclose(
+            pycsldv.demodulate_ods_1d(velocity, FS, fn=FZ, fx=FX, order=5),
+            reference, atol=1e-10)
+
+    def test_the_normal_equations_keep_the_exact_shape_exact(self):
+        """Accumulating A.T @ A squares the condition number, so this checks
+        that a well-covered scan still recovers an exact Chebyshev shape to
+        the same tolerance as before the change."""
+        c_true = np.zeros((4, 4))
+        c_true[0, 0] = 0.2
+        c_true[1, 2] = 1.0
+        c_true[3, 1] = -0.7
+        _, x, y = pycsldv.lissajous(FX, FY, N, FS)
+        velocity = pycsldv.simulate_response(pycsldv.chebyshev_shape(c_true),
+                                             FZ, x, y, FS)
+
+        estimated = pycsldv.demodulate_ods_2d(velocity, FS, FX, FY, fn=FZ, order=3)
+        assert np.allclose(estimated.real, c_true, atol=1e-8)
+
+    def test_memory_does_not_follow_the_record_length(self, monkeypatch):
+        """A record four times longer must not cost four times the memory:
+        the accumulated system is (unknowns, unknowns) whatever the length.
+
+        The block size is lowered here so that the record is actually split;
+        at its normal setting a record this short fits in one block, which is
+        the right thing to do but not what this is testing.
+        """
+        import tracemalloc
+
+        monkeypatch.setattr(pycsldv.demodulate, "_CHUNK_BYTES", 1 << 18)
+        peaks = []
+        for seconds in (2, 8):
+            n = int(seconds * FS)
+            _, x, y = pycsldv.lissajous(FX, FY, n, FS)
+            velocity = pycsldv.simulate_response(pycsldv.plate_mode(2, 3),
+                                                 FZ, x, y, FS)
+            tracemalloc.start()
+            pycsldv.demodulate_ods_2d(velocity, FS, FX, FY, fn=FZ, order=8)
+            peaks.append(tracemalloc.get_traced_memory()[1])
+            tracemalloc.stop()
+
+        # the design matrix alone would have grown by a factor of four; what
+        # is left growing is the velocity signal itself and its transpose
+        assert peaks[1] < 2 * peaks[0]

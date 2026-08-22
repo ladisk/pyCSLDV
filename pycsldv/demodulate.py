@@ -69,10 +69,35 @@ def reference_phase(signal, f, fs, window=None):
 #: Condition number above which the fit is reported as poorly determined.
 _CONDITION_LIMIT = 100.0
 
+#: Rows of the design matrix to build at a time. Sized so that one block is
+#: tens of MB for a typical number of unknowns; it only affects memory and
+#: speed, never the result.
+_CHUNK_BYTES = 64 << 20
 
-def _solve(design, velocity, fs, scan_frequencies):
+
+def _solve(design, velocity, fs, scan_frequencies, unknowns):
     """
     Solve the least-squares system, and say so when it cannot be solved.
+
+    The design matrix is ``n_samples`` by ``unknowns``, which for a long
+    record is far larger than everything else in the problem put together: a
+    10 s scan at 100 kS/s reconstructed to order 12 would be 2.7 GB. It is
+    therefore never held whole. ``design(start, stop)`` is asked for a block
+    of rows at a time and only the normal equations are accumulated,
+
+    .. math::
+
+        A^T A \\, \\theta = A^T v,
+
+    which are ``unknowns`` square -- under a megabyte at order 12, whatever
+    the length of the record.
+
+    Forming ``A^T A`` squares the condition number of the system, so it is
+    the one part of the chain where a poorly covered scan costs accuracy
+    twice over. That is worth knowing about rather than hiding, and it is
+    what the diagnostics below report: the eigenvalues of ``A^T A`` are the
+    squared singular values of ``A``, so the rank and the condition number of
+    the original system come out of the same decomposition.
 
     ``numpy.linalg.lstsq`` returns the minimum-norm solution of a
     rank-deficient system rather than refusing it, so a fit that cannot be
@@ -81,22 +106,34 @@ def _solve(design, velocity, fs, scan_frequencies):
     until the laser has been everywhere, the basis functions are not linearly
     independent over the samples that exist.
 
-    :param design: design matrix of the system
+    :param design: callable ``design(start, stop)`` returning the rows of the
+        design matrix for those samples
     :param velocity: right-hand side, shape ``(locations, n_samples)``
     :param fs: sampling frequency [Hz], for the diagnostic only
     :param scan_frequencies: the scan frequencies [Hz], for the diagnostic only
-    :return: the solution, shape ``(locations, n_unknowns)``
+    :param unknowns: number of columns of the design matrix
+    :return: the solution, shape ``(locations, unknowns)``
     """
     from .scan import scan_period      # imported here: scan imports from this module
 
-    solution, _, rank, singular = np.linalg.lstsq(design, velocity.T, rcond=None)
-    unknowns = design.shape[1]
-    if rank == unknowns and singular[-1] > 0:
-        # The singular values come free with the solve. A scan that covers the
-        # surface conditions this system at a few units; the threshold sits
-        # where poor coverage starts to matter in practice. Measured on a
-        # plate mode with 5 % noise: at a condition number of 15 the
-        # reconstruction still reaches MAC 0.999, at 624 it falls to 0.52.
+    n_samples = velocity.shape[1]
+    chunk = max(1, min(n_samples, _CHUNK_BYTES // (8 * max(unknowns, 1))))
+
+    gram = np.zeros((unknowns, unknowns))
+    moment = np.zeros((unknowns, velocity.shape[0]))
+    for start in range(0, n_samples, chunk):
+        stop = min(start + chunk, n_samples)
+        rows = design(start, stop)
+        gram += rows.T @ rows
+        moment += rows.T @ velocity[:, start:stop].T
+
+    # eigenvalues of A^T A are the squared singular values of A
+    eigenvalues = np.linalg.eigvalsh(gram)[::-1]
+    singular = np.sqrt(np.clip(eigenvalues, 0.0, None))
+    tolerance = singular[0] * max(n_samples, unknowns) * np.finfo(float).eps
+    rank = int(np.count_nonzero(singular > tolerance))
+
+    if rank == unknowns:
         condition = singular[0] / singular[-1]
         if condition > _CONDITION_LIMIT:
             warnings.warn(
@@ -106,8 +143,9 @@ def _solve(design, velocity, fs, scan_frequencies):
                 f"the surface conditions it at a few units. The shape may be "
                 f"reconstructed from a noise-free simulation and still be "
                 f"unusable from a measurement.")
-    if rank < unknowns:
-        duration = design.shape[0] / fs
+        solution = np.linalg.solve(gram, moment)
+    else:
+        duration = n_samples / fs
         closure = scan_period(*scan_frequencies) if len(scan_frequencies) > 1 \
             else 1.0 / scan_frequencies[0] if scan_frequencies[0] else None
         hint = ""
@@ -120,6 +158,8 @@ def _solve(design, velocity, fs, scan_frequencies):
             f"unknowns are determined by the data), so the coefficients are the "
             f"minimum-norm solution and not a reconstruction of the shape."
             + hint)
+        solution = np.linalg.lstsq(gram, moment, rcond=None)[0]
+
     return solution.T
 
 
@@ -165,71 +205,52 @@ def demodulate_ods_1d(
         raise ValueError("`poles` and `order` must have the same length.")
 
     n_locations, n_samples = velocity.shape
-    t = np.arange(n_samples) / fs
 
-    theta_x = 2.0 * np.pi * fx * t + phi_x
-
-    real_blocks = []
-    imag_blocks = []
+    # The real part of every mode's coefficients first, then the imaginary
+    # part of every mode that has one; a mode at zero frequency has no
+    # quadrature component.
     mode_info = []
-
     real_col_idx = 0
     imag_col_idx = 0
-
     for pole, P in zip(poles, order):
-        P = int(P)
-        p = np.arange(P + 1)[:, None]  # Shape: (P + 1, 1)
-
-        T_p = np.cos(p * theta_x)
-        nc = P + 1
-
-        sigma = pole.real
-        omega = pole.imag  # Frequency in rad/s
-
-        # Exponential decay/growth envelope
-        decay = np.exp(sigma * t)
-
-        if np.isclose(omega, 0.0):
-            # Purely real / DC component (omega = 0)
-            real_blocks.append(T_p * decay)
-
-            mode_info.append({
-                'nc': nc,
-                'is_dc': True,
-                'real_col': real_col_idx,
-                'imag_col': None
-            })
-            real_col_idx += nc
-        else:
-            # AC component with damping
-            real_blocks.append(T_p * decay * np.cos(omega * t))
-            imag_blocks.append(T_p * decay * np.sin(omega * t))
-
-            mode_info.append({
-                'nc': nc,
-                'is_dc': False,
-                'real_col': real_col_idx,
-                'imag_col': imag_col_idx
-            })
-            real_col_idx += nc
+        nc = int(P) + 1
+        is_dc = bool(np.isclose(pole.imag, 0.0))
+        mode_info.append({
+            'nc': nc,
+            'is_dc': is_dc,
+            'real_col': real_col_idx,
+            'imag_col': None if is_dc else imag_col_idx,
+        })
+        real_col_idx += nc
+        if not is_dc:
             imag_col_idx += nc
 
-    # Stack only active basis blocks
-    A_real_all = np.vstack(real_blocks)
+    def design(start, stop):
+        """The rows of the design matrix for samples ``start:stop``."""
+        t = np.arange(start, stop) / fs
+        theta_x = 2.0 * np.pi * fx * t + phi_x
 
-    if imag_blocks:
-        A_imag_all = np.vstack(imag_blocks)
-        # v(t) = Re(A) @ Re(C) - Im(A) @ Im(C)
-        A_real_system = np.hstack([A_real_all.T, -A_imag_all.T])
-    else:
-        A_real_system = A_real_all.T
+        rows = np.empty((stop - start, real_col_idx + imag_col_idx))
+        for pole, info in zip(poles, mode_info):
+            basis = np.cos(np.arange(info['nc'])[:, None] * theta_x[None, :])
+            decay = np.exp(pole.real * t)
+            column = info['real_col']
+            if info['is_dc']:
+                rows[:, column:column + info['nc']] = (basis * decay).T
+            else:
+                omega = pole.imag
+                rows[:, column:column + info['nc']] = \
+                    (basis * (decay * np.cos(omega * t))).T
+                column = real_col_idx + info['imag_col']
+                rows[:, column:column + info['nc']] = \
+                    -(basis * (decay * np.sin(omega * t))).T
+        return rows
 
-    # Solve full linear least-squares system
-    Theta = _solve(A_real_system, velocity, fs, (fx,))
+    Theta = _solve(design, velocity, fs, (fx,), real_col_idx + imag_col_idx)
 
     # Separate real and imaginary solution blocks
     Re_C_all = Theta[:, :real_col_idx]
-    Im_C_all = Theta[:, real_col_idx:] if imag_blocks else None
+    Im_C_all = Theta[:, real_col_idx:] if imag_col_idx else None
 
     # Reconstruct mode-by-mode complex coefficient arrays
     Phi_vec = []
@@ -391,75 +412,57 @@ def demodulate_ods_2d(
         raise ValueError("Chebyshev orders must be non-negative.")
 
     n_locations, n_samples = velocity.shape
-    t = np.arange(n_samples) / fs
 
-    theta_x = 2.0 * np.pi * fx * t + phi_x
-    theta_y = 2.0 * np.pi * fy * t + phi_y
-
-    real_blocks = []
-    imag_blocks = []
+    # Lay out the unknowns: the real part of every mode's coefficients first,
+    # then the imaginary part of every mode that has one. A mode at zero
+    # frequency has no quadrature component and so contributes no imaginary
+    # block.
     mode_info = []
-
     real_col_idx = 0
     imag_col_idx = 0
-
     for pole, (Px, Py) in zip(poles, order):
-        Px = int(Px)
-        Py = int(Py)
-
-        x_basis = np.cos(np.arange(Px + 1)[:, None] * theta_x[None, :])
-        y_basis = np.cos(np.arange(Py + 1)[:, None] * theta_y[None, :])
-        basis = (x_basis[:, None, :] * y_basis[None, :, :]).reshape((Px + 1) * (Py + 1), n_samples)
-
-        sigma = pole.real
-        omega = pole.imag
-        decay = np.exp(sigma * t)
-
+        Px, Py = int(Px), int(Py)
         nc = (Px + 1) * (Py + 1)
-
-        if np.isclose(omega, 0.0):
-            real_blocks.append(basis * decay[None, :])
-
-            mode_info.append({
-                "shape": (Px, Py),
-                "nc": nc,
-                "is_dc": True,
-                "real_col": real_col_idx,
-                "imag_col": None,
-            })
-
-            real_col_idx += nc
-
-        else:
-            real_blocks.append(basis * (decay * np.cos(omega * t))[None, :])
-            imag_blocks.append(basis * (decay * np.sin(omega * t))[None, :])
-
-            mode_info.append({
-                "shape": (Px, Py),
-                "nc": nc,
-                "is_dc": False,
-                "real_col": real_col_idx,
-                "imag_col": imag_col_idx,
-            })
-
-            real_col_idx += nc
+        is_dc = bool(np.isclose(pole.imag, 0.0))
+        mode_info.append({
+            "shape": (Px, Py),
+            "nc": nc,
+            "is_dc": is_dc,
+            "real_col": real_col_idx,
+            "imag_col": None if is_dc else imag_col_idx,
+        })
+        real_col_idx += nc
+        if not is_dc:
             imag_col_idx += nc
 
-    A_real = np.vstack(real_blocks).T
+    def design(start, stop):
+        """The rows of the design matrix for samples ``start:stop``."""
+        t = np.arange(start, stop) / fs
+        theta_x = 2.0 * np.pi * fx * t + phi_x
+        theta_y = 2.0 * np.pi * fy * t + phi_y
 
-    A_imag = np.zeros((n_samples, imag_col_idx))
+        rows = np.empty((stop - start, real_col_idx + imag_col_idx))
+        for pole, info in zip(poles, mode_info):
+            Px, Py = info["shape"]
+            x_basis = np.cos(np.arange(Px + 1)[:, None] * theta_x[None, :])
+            y_basis = np.cos(np.arange(Py + 1)[:, None] * theta_y[None, :])
+            basis = (x_basis[:, None, :] * y_basis[None, :, :]).reshape(
+                info["nc"], stop - start)
 
-    imag_block_idx = 0
-    for info in mode_info:
-        if not info["is_dc"]:
-            nc = info["nc"]
-            col = info["imag_col"]
-            A_imag[:, col:col + nc] = imag_blocks[imag_block_idx].T
-            imag_block_idx += 1
+            decay = np.exp(pole.real * t)
+            column = info["real_col"]
+            if info["is_dc"]:
+                rows[:, column:column + info["nc"]] = (basis * decay).T
+            else:
+                omega = pole.imag
+                rows[:, column:column + info["nc"]] = \
+                    (basis * (decay * np.cos(omega * t))).T
+                column = real_col_idx + info["imag_col"]
+                rows[:, column:column + info["nc"]] = \
+                    -(basis * (decay * np.sin(omega * t))).T
+        return rows
 
-    A = np.hstack([A_real, -A_imag])
-
-    Theta = _solve(A, velocity, fs, (fx, fy))
+    Theta = _solve(design, velocity, fs, (fx, fy), real_col_idx + imag_col_idx)
 
     Re_C_all = Theta[:, :real_col_idx]
     Im_C_all = Theta[:, real_col_idx:]

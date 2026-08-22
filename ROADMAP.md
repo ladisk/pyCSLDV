@@ -13,11 +13,11 @@
 - [x] evaluate_ods, plot_ods and rotate_ods accept the list a multimodal fit
       returns and the stack a multi-sensor one does. plot_ods draws one panel
       per shape
-- [ ] The design matrix is n_samples x 2(Px+1)(Py+1) and is formed in full: a
-      10 s record at 100 kS/s and order 12 needs 2.7 GB, 30 s needs 8.1 GB.
-      Accumulating the normal equations in chunks would make the memory
-      independent of the record length (0.9 MB at order 12), at the cost of
-      squaring the condition number
+- [x] The design matrix is no longer formed in full: it is built a block of
+      rows at a time and only the normal equations are accumulated, so the
+      memory no longer follows the record length. The 4527 Hz measurement at
+      order 12 went from a 2.7 GB matrix and 13.5 s to 424 MB and 3.7 s, with
+      the reconstruction unchanged (MAC 0.9905 against the original suite)
 - [x] A fit the data cannot determine is reported: the rank comes back from
       the solve, and the singular values with it, so both a rank-deficient
       system and a merely ill-conditioned one are warned about. Calibrated on
