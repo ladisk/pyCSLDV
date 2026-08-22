@@ -1,6 +1,8 @@
 pyCSLDV
 -------
 
+|Testing| |Python| |License| |Status|
+
 Continuous scanning laser Doppler vibrometry (CSLDV) in Python: Lissajous
 scan-trajectory design, virtual CSLDV experiments and reconstruction of
 operating deflection shapes (ODS) using the polynomial (sideband
@@ -96,9 +98,11 @@ validated against your own reference data before being relied upon.
 Installation
 ------------
 
+pyCSLDV is not on PyPI yet; install it from the repository:
+
 .. code-block:: console
 
-    $ pip install pyCSLDV
+    $ pip install git+https://github.com/ladisk/pyCSLDV.git
 
 For development, clone the repository and install in editable mode:
 
@@ -268,3 +272,20 @@ References
 - S. Rothberg et al.: An international review of laser Doppler vibrometry:
   Making light work of vibration measurement, Optics and Lasers in
   Engineering 99, 2017, 11–22.
+
+
+.. |Testing| image:: https://github.com/ladisk/pyCSLDV/actions/workflows/python-package.yml/badge.svg
+   :target: https://github.com/ladisk/pyCSLDV/actions/workflows/python-package.yml
+   :alt: Testing
+
+.. |Python| image:: https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg
+   :target: https://www.python.org/downloads/
+   :alt: Python 3.10, 3.11, 3.12
+
+.. |License| image:: https://img.shields.io/badge/license-MIT-yellow.svg
+   :target: https://github.com/ladisk/pyCSLDV/blob/main/License
+   :alt: MIT license
+
+.. |Status| image:: https://img.shields.io/badge/status-alpha-orange.svg
+   :target: https://github.com/ladisk/pyCSLDV#origin-and-attribution
+   :alt: Alpha
