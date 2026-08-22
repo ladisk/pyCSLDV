@@ -5,8 +5,9 @@ Copyright (c) 2026 Janko Slavič
 This package is a reimplementation of the "Continuous Scanning Laser
 Doppler Vibrometry (CSLDV) Vibration Measurement & Simulation Suite" by
 Joshua Bartlett and Pablo Tarazaga (Texas A&M University), published under
-the CC-BY-4.0 license at https://zenodo.org/records/21301126
-(DOI: 10.5281/zenodo.21301126). The original material has been modified;
+the CC-BY-4.0 license at https://zenodo.org/records/22032252
+(DOI: 10.5281/zenodo.22032252; the concept DOI 10.5281/zenodo.21301125
+always resolves to the latest version). The original material has been modified;
 see the "Origin and attribution" section of README.rst for the changes.
 The reference implementation transcribed in tests/test_matlab_reference.py
 is adapted from that suite and remains subject to its CC-BY-4.0 terms.

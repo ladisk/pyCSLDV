@@ -7,8 +7,10 @@ simulation, so a shared misconception in ``simulate.py`` and
 ``demodulate.py`` would pass unnoticed. The reference implementation below
 closes that gap: it is a direct, deliberately un-idiomatic transcription of
 ``ComputeODS.m`` from the original CSLDV suite (Bartlett & Tarazaga,
-CC-BY-4.0, DOI 10.5281/zenodo.21301126), kept close to the MATLAB line by
-line so that it can be checked against the published source by eye.
+CC-BY-4.0, DOI 10.5281/zenodo.22032252), kept close to the MATLAB line by
+line so that it can be checked against the published source by eye. It was
+transcribed from version 1.0; version 1.1 added the measured dataset and
+left every file of the suite itself byte-identical.
 
 Two bookkeeping differences between the implementations are expected and
 are handled by the tests:
