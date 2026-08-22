@@ -17,6 +17,8 @@ passed in but rebuilt from ``fx``, ``fy`` and the mirror phases, so those
 phases have to be supplied by the caller.
 """
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -306,3 +308,138 @@ class TestWithRotation:
         # away from the corners, which the rotated series extrapolates
         inside = np.hypot(x_grid, y_grid) < 0.7
         assert pycsldv.mac(upright(x_grid, y_grid)[inside], z.real[inside]) > 0.99
+
+
+class TestDiagnostics:
+    """The fit reports when the data cannot determine it.
+
+    ``numpy.linalg.lstsq`` answers a rank-deficient system with the
+    minimum-norm solution instead of refusing it, so without these the caller
+    gets plausible-looking coefficients and no indication that the shape was
+    never recoverable.
+    """
+
+    def short_measurement(self, seconds, noise_std=0.0):
+        n = int(seconds * FS)
+        _, x, y = pycsldv.lissajous(FX, FY, n, FS)
+        rng = np.random.default_rng(0)
+        return pycsldv.simulate_response(pycsldv.plate_mode(2, 3), FZ, x, y, FS,
+                                         noise_std=noise_std, rng=rng)
+
+    def test_a_record_that_does_not_cover_the_scan_is_reported(self):
+        """0.3 s of a scan that closes after 5 s: the laser has not been
+        everywhere, so most of the basis is not yet independent."""
+        velocity = self.short_measurement(0.3)
+
+        with pytest.warns(UserWarning, match="rank-deficient"):
+            pycsldv.demodulate_ods_2d(velocity, FS, FX, FY, fn=FZ, order=8)
+
+    def test_the_report_names_the_scan_period(self):
+        velocity = self.short_measurement(0.3)
+
+        with pytest.warns(UserWarning, match="scan closes after 5 s"):
+            pycsldv.demodulate_ods_2d(velocity, FS, FX, FY, fn=FZ, order=8)
+
+    def test_a_barely_covered_scan_is_reported_as_ill_conditioned(self):
+        """At 0.6 s the system has full rank and a noise-free simulation is
+        reconstructed at MAC 0.9997 -- but its condition number is 624, and
+        the same measurement with 5 % noise falls to MAC 0.52. Full rank is
+        therefore not enough to keep quiet about."""
+        velocity = self.short_measurement(0.6)
+
+        with pytest.warns(UserWarning, match="ill-conditioned"):
+            pycsldv.demodulate_ods_2d(velocity, FS, FX, FY, fn=FZ, order=8)
+
+    def test_a_covered_scan_is_not_reported(self):
+        """The warnings have to stay quiet on ordinary measurements, or they
+        will be ignored when they matter."""
+        for seconds in (0.75, 2.0, 10.0):
+            velocity = self.short_measurement(seconds, noise_std=0.05)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                pycsldv.demodulate_ods_2d(velocity, FS, FX, FY, fn=FZ, order=8)
+
+    def test_the_line_scan_fit_reports_too(self):
+        n = int(0.3 * FS)
+        _, x = pycsldv.sinusoidal_scan(FX, n, FS)
+        t = np.arange(n) / FS
+        velocity = np.cos(2 * np.pi * FZ * t) * x
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pycsldv.demodulate_ods_1d(velocity, FS, fn=FZ, fx=FX, order=40)
+        assert any("rank-deficient" in str(w.message) or "ill-conditioned" in str(w.message)
+                   for w in caught)
+
+
+@pytest.fixture(scope="module")
+def velocity():
+    """A plain single-mode measurement; these tests are about the shape of
+    the results, not their values."""
+    _, x, y = pycsldv.lissajous(FX, FY, N, FS)
+    return pycsldv.simulate_response(pycsldv.plate_mode(2, 3), FZ, x, y, FS)
+
+
+class TestStackedResults:
+    """A multimodal or multi-sensor fit returns a list or a stack; the rest
+    of the package accepts them rather than making the caller loop."""
+
+    def test_evaluate_ods_of_a_list(self, velocity):
+        estimated = pycsldv.demodulate_ods_2d(velocity, FS, FX, FY,
+                                              fn=[FZ, FZ + 2 * FX], order=6)
+        evaluated = pycsldv.evaluate_ods(estimated, resolution=20)
+
+        assert isinstance(evaluated, list) and len(evaluated) == 2
+        for x_grid, y_grid, z in evaluated:
+            assert x_grid.shape == y_grid.shape == z.shape == (20, 20)
+
+    def test_evaluate_ods_of_a_sensor_stack(self, velocity):
+        estimated = pycsldv.demodulate_ods_2d(np.vstack([velocity, 2 * velocity]),
+                                              FS, FX, FY, fn=FZ, order=6)
+        evaluated = pycsldv.evaluate_ods(estimated, resolution=20)
+
+        assert len(evaluated) == 2
+        assert np.allclose(evaluated[1][2], 2 * evaluated[0][2])
+
+    def test_rotate_ods_of_a_stack_turns_every_shape(self, velocity):
+        estimated = pycsldv.demodulate_ods_2d(np.vstack([velocity, 2 * velocity]),
+                                              FS, FX, FY, fn=FZ, order=6)
+        rotated = pycsldv.rotate_ods(estimated, 0.1)
+
+        assert rotated.shape[0] == 2
+        for location in range(2):
+            assert np.allclose(rotated[location],
+                               pycsldv.rotate_ods(estimated[location], 0.1))
+
+    def test_rotate_ods_of_a_list(self, velocity):
+        estimated = pycsldv.demodulate_ods_2d(velocity, FS, FX, FY,
+                                              fn=[FZ, FZ + 2 * FX], order=6)
+        rotated = pycsldv.rotate_ods(estimated, 0.1)
+
+        assert isinstance(rotated, list) and len(rotated) == 2
+
+    def test_rotate_ods_still_refuses_a_line(self, velocity):
+        """A rotation mixes two directions, so a line scan has none to mix."""
+        line = pycsldv.demodulate_ods_1d(velocity, FS, fn=FZ, fx=FX, order=5)
+        with pytest.raises(ValueError, match="two-dimensional"):
+            pycsldv.rotate_ods(line, 0.1)
+
+    def test_plot_ods_draws_one_panel_per_shape(self, velocity):
+        import matplotlib
+        matplotlib.use("Agg")
+
+        estimated = pycsldv.demodulate_ods_2d(velocity, FS, FX, FY,
+                                              fn=[FZ, FZ + 2 * FX], order=6)
+        axes = pycsldv.plot_ods(estimated)
+        assert len(axes) == 2
+
+    def test_plot_ods_rejects_one_axes_for_several_shapes(self, velocity):
+        import matplotlib
+        import matplotlib.pyplot as plt
+        matplotlib.use("Agg")
+
+        estimated = pycsldv.demodulate_ods_2d(velocity, FS, FX, FY,
+                                              fn=[FZ, FZ + 2 * FX], order=6)
+        _, ax = plt.subplots()
+        with pytest.raises(ValueError, match="single shape"):
+            pycsldv.plot_ods(estimated, ax=ax)

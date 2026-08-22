@@ -176,6 +176,17 @@ modes and sensors at once:
     C = pycsldv.demodulate_ods_1d(velocity, fs, fn=500.0, fx=fx, order=5)
     points, z = pycsldv.evaluate_ods(C, resolution=200)
 
+The results follow the input: several modes come back as a list, several
+sensors as an array stacked along a leading axis, and ``evaluate_ods``,
+``plot_ods`` and ``rotate_ods`` take either.
+
+A fit that the measurement cannot determine is reported rather than returned
+quietly. ``numpy``'s least-squares solver answers a rank-deficient system
+with its minimum-norm solution, which looks like a set of coefficients and is
+not one, so both the rank and the conditioning are checked: a record that
+does not cover the scan, or one that barely does, produces a warning naming
+the scan period or the condition number.
+
 Fitting the modes together matters when they are close enough for the
 sidebands of one to land on those of another. The spacing that hurts is not
 "a few Hz" but a multiple of a scan frequency: a second mode ``2 fx`` away

@@ -10,14 +10,19 @@
       global least-squares fit (several modes, overlapping sidebands, complex poles,
       order per mode and direction, several sensors, line scans) and section 6 the
       rotation of a shape onto other axes
-- [ ] evaluate_ods and plot_ods take a single coefficient array, so the list a
-      multimodal demodulation returns has to be indexed by the caller
-- [ ] rotate_ods takes a single 2D matrix, not the stacked multi-sensor or
-      multimodal results
+- [x] evaluate_ods, plot_ods and rotate_ods accept the list a multimodal fit
+      returns and the stack a multi-sensor one does. plot_ods draws one panel
+      per shape
 - [ ] The design matrix is n_samples x 2(Px+1)(Py+1) and is formed in full: a
-      10 s record at 100 kS/s and order 12 needs 2.7 GB
-- [ ] A record shorter than one scan period is fitted without warning, and the
-      result is meaningless
+      10 s record at 100 kS/s and order 12 needs 2.7 GB, 30 s needs 8.1 GB.
+      Accumulating the normal equations in chunks would make the memory
+      independent of the record length (0.9 MB at order 12), at the cost of
+      squaring the condition number
+- [x] A fit the data cannot determine is reported: the rank comes back from
+      the solve, and the singular values with it, so both a rank-deficient
+      system and a merely ill-conditioned one are warned about. Calibrated on
+      a plate mode with 5 % noise -- condition 15 still reconstructs at
+      MAC 0.999, condition 624 falls to 0.52
 - [x] Update testing suite. tests/test_demodulate_1d.py and tests/test_demodulate_2d.py
       cover the least-squares reconstruction; the rotation of a shape onto another
       set of axes is in tests/test_demodulate.py
