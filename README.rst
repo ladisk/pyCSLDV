@@ -14,6 +14,12 @@ as sidebands at ``fz ± n fx ± m fy``. Demodulating these sidebands yields
 the coefficients of a two-dimensional Chebyshev series that describes the
 full-field ODS from a single-point sensor measurement.
 
+The coefficients are recovered either by projecting the velocity onto each
+sideband in turn, or by fitting every mode at once as one global linear
+least-squares system. The second form carries complex poles instead of
+frequencies, so it also covers damped and complex modes, modes whose
+sidebands overlap, several sensors, and line scans.
+
 This package is developed on the `SDyPy template
 <https://github.com/sdypy/sdypy_template_project>`_ and is part of the
 wider `SDyPy <https://github.com/sdypy>`_ ecosystem effort.
@@ -45,6 +51,12 @@ a translation of the MATLAB routines:
 - the global phase is normalized on the dominant coefficient
   (``align_phase``) rather than on the response baseband phase;
 - overlapping sidebands are detected and reported;
+- besides the per-sideband projection, the coefficients of every mode can be
+  fitted in a single linear least-squares system (``demodulate_ods_2d``,
+  ``demodulate_ods_1d``), which takes complex poles rather than real
+  frequencies and so reconstructs damped and complex modes, resolves modes
+  whose sidebands fall on top of each other, and fits several sensors and
+  line scans;
 - the ODS rotation acts on the Chebyshev coefficients, so turning a shape
   onto another set of axes is exact rather than a resampling of a grid, and
   it is applied to the physical surface or to the normalized domain as the
@@ -68,12 +80,18 @@ suite. It has not yet been reviewed by the authors of that suite.
 The reconstruction chain is covered end to end by the test suite: an exact
 Chebyshev shape is recovered from a simulated measurement to within
 ``1e-8``, mirror and response phases are verified to be compensated, a
-plate mode measured with 5 % noise is reconstructed with MAC > 0.99, and
-the result is checked against the transcribed MATLAB reference
-implementation. Those tests validate the processing chain against the
-original method, not against physical measurements; the package is at an
-alpha stage and results should be validated against your own reference
-data before being relied upon.
+plate mode measured with 5 % noise is reconstructed with MAC > 0.99, a
+damped complex mode is recovered from its pole, two modes whose sidebands
+coincide are separated, and the result is checked against the transcribed
+MATLAB reference implementation.
+
+The chain is also run on a real measurement — the 4527 Hz plate scan
+published with the original suite — and agrees with the ODS that suite
+reconstructed from the same samples at MAC 0.9905, and at 0.9955 once the
+shape is turned onto the mirror axes. That is a comparison against one
+measurement processed by one other implementation, not a metrological
+validation; the package is at an alpha stage and results should be
+validated against your own reference data before being relied upon.
 
 Installation
 ------------
@@ -120,6 +138,58 @@ known deflection shape, reconstruct the ODS and quantify the agreement:
     # Visualize
     pycsldv.plot_ods(C)
 
+Several modes, damping, several sensors, line scans
+---------------------------------------------------
+
+``demodulate_ods`` above projects the velocity onto each sideband in turn. It
+takes the recorded mirror signals, so the mirror phases — the inertial lag of
+the galvos — are estimated from the signals themselves.
+
+``demodulate_ods_2d`` instead fits
+
+.. code-block:: text
+
+    v(t) = sum_k Re{ C_k(x(t), y(t)) exp(lambda_k t) }
+
+as one global linear least-squares system. It rebuilds the trajectory from
+``fx``, ``fy`` and the mirror phases, which therefore have to be passed as
+``phi_x`` and ``phi_y`` (``reference_phase(x, fx, fs)`` measures them from
+recorded feedback). In exchange it takes complex poles
+``lambda = sigma + i omega`` instead of real frequencies, and any number of
+modes and sensors at once:
+
+.. code-block:: python
+
+    # one undamped mode and one ringing down, fitted together,
+    # to different orders
+    poles = [2j * np.pi * 500.0, -0.5 + 2j * np.pi * 502.8]
+    C_first, C_second = pycsldv.demodulate_ods_2d(velocity, fs, fx, fy,
+                                                  poles=poles, order=[6, 8])
+
+    # the three heads of a 3D scanning vibrometer: (locations, n_samples) in,
+    # one coefficient matrix per location out
+    C = pycsldv.demodulate_ods_2d(np.vstack([v_x, v_y, v_z]), fs, fx, fy,
+                                  fn=500.0, order=6)
+
+    # a line scan: one Chebyshev variable; evaluate_ods and plot_ods
+    # recognize it from the shape of the coefficients
+    C = pycsldv.demodulate_ods_1d(velocity, fs, fn=500.0, fx=fx, order=5)
+    points, z = pycsldv.evaluate_ods(C, resolution=200)
+
+Fitting the modes together matters when they are close enough for the
+sidebands of one to land on those of another. The spacing that hurts is not
+"a few Hz" but a multiple of a scan frequency: a second mode ``2 fx`` away
+puts its carrier exactly on the first mode's ``n = 2`` sideband, where the
+projection cannot tell the two apart while the global fit still recovers
+both.
+
+The design matrix is ``n_samples`` by ``2 sum_k (Px + 1)(Py + 1)`` and is
+formed in full, so a long record reconstructed to a high order is expensive:
+10 s at 100 kS/s and order 12 needs about 2.7 GB.
+
+Measured data
+-------------
+
 For measured data, pass the recorded velocity and mirror feedback signals
 to ``demodulate_ods`` directly — the mirror phases (inertial lag) are
 estimated from the feedback signals themselves. pyCSLDV reads no file
@@ -147,7 +217,10 @@ An adapter for the export format of the original LabVIEW/MATLAB suite is
 provided as an example rather than as part of the package, in
 ``examples/csldv_suite_export.py``.
 
-The same example can be run from the project base directory with:
+Examples and notebooks
+----------------------
+
+The bundled example can be run from the project base directory with:
 
 .. code-block:: console
 
