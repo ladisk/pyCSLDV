@@ -14,6 +14,7 @@ authors = [
 ]
 maintainers = [{name = "Janko Slavič", email = "janko.slavic@fs.uni-lj.si"}]
 license = "MIT"
+license-files = ["License"]
 description = "Continuous scanning laser Doppler vibrometry (CSLDV): scan design, simulation and ODS reconstruction."
 readme = "README.rst"
 keywords = ["CSLDV", "LDV", "vibrometry", "structural dynamics", "modal analysis", "sdypy"]
@@ -60,5 +61,8 @@ include = ["pycsldv/*"]
 # Define the files that are included in the source distribution (tar.gz)
 [tool.hatch.build.targets.sdist]
 include = [
-    "pycsldv/*"
+    "pycsldv/*",
+    "README.rst",
+    "License",
+    "CITATION.cff",
 ]

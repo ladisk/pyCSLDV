@@ -30,7 +30,7 @@ authors:
     given-names: Dario
     affiliation: "University of Twente"
 version: 0.1.0
-date-released: "2026-07-28"
+date-released: "2026-09-20"
 license: MIT
 repository-code: "https://github.com/ladisk/pyCSLDV"
 keywords:

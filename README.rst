@@ -98,7 +98,13 @@ validated against your own reference data before being relied upon.
 Installation
 ------------
 
-pyCSLDV is not on PyPI yet; install it from the repository:
+Install the released package from PyPI:
+
+.. code-block:: console
+
+    $ pip install pyCSLDV
+
+or the current development version from the repository:
 
 .. code-block:: console
 
