@@ -263,21 +263,23 @@ References
 ----------
 
 - J. Bartlett, P. Tarazaga: Continuous Scanning Laser Doppler Vibrometry
-  (CSLDV) Vibration Measurement & Simulation Suite, Zenodo, 2026,
-  DOI: 10.5281/zenodo.21301126.
+  (CSLDV) Vibration Measurement & Simulation Suite, version 1.1, Zenodo,
+  2026, DOI: 10.5281/zenodo.22032252 (concept DOI 10.5281/zenodo.21301125
+  resolves to the latest version). Version 1.1 adds the measured dataset
+  the tests and ``Showcase_measured.ipynb`` run on.
 - A. B. Stanbridge, D. J. Ewins: Modal testing using a scanning laser
   Doppler vibrometer, Mechanical Systems and Signal Processing 13(2),
   1999, 255–270.
-- L. Mignanelli, P. Chiariotti, P. Castellini, M. Martarelli: Blind 
-  Identification of Operational Deflection Shapes from Continuous Scanning 
-  Laser Doppler Vibrometry Data, Sensors and Instrumentation 5, 2016, 
+- L. Mignanelli, P. Chiariotti, P. Castellini, M. Martarelli: Blind
+  Identification of Operational Deflection Shapes from Continuous Scanning
+  Laser Doppler Vibrometry Data, Sensors and Instrumentation 5, 2016,
   105–111.
 - S. Rothberg et al.: An international review of laser Doppler vibrometry:
   Making light work of vibration measurement, Optics and Lasers in
   Engineering 99, 2017, 11–22.
 - D. Di Maio et al.: Continuous Scanning Laser Vibrometry: A raison d’être
- and applications to vibration measurements, Mechanical Systems and Signal 
- Processing 156, 2021, 107573.
+  and applications to vibration measurements, Mechanical Systems and Signal
+  Processing 156, 2021, 107573.
 
 
 .. |Testing| image:: https://github.com/ladisk/pyCSLDV/actions/workflows/python-package.yml/badge.svg
