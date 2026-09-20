@@ -8,15 +8,27 @@ abstract: >-
   covering Lissajous scan design, virtual CSLDV experiments and ODS
   reconstruction by sideband demodulation. The original material has been
   modified; see the README for the changes. The initial implementation was
-  written with Claude (Anthropic) and has not yet been reviewed by the
-  authors of the original suite.
-# The authors of the original suite are credited in the references section
-# below. Add them here as co-authors once they have reviewed the package.
+  written with Claude (Anthropic).
 authors:
   - family-names: Slavič
     given-names: Janko
     orcid: "https://orcid.org/0000-0002-5982-8377"
     affiliation: "University of Ljubljana, Faculty of Mechanical Engineering"
+  - family-names: Bartlett
+    given-names: Joshua
+    orcid: "https://orcid.org/0009-0007-4513-7683"
+    affiliation: "Texas A&M University"
+  - family-names: Tarazaga
+    given-names: Pablo
+    orcid: "https://orcid.org/0000-0002-5443-8484"
+    affiliation: "Texas A&M University"
+  - family-names: Masmeijer
+    given-names: Thijs
+    orcid: "https://orcid.org/0009-0005-4167-8322"
+    affiliation: "University of Twente"
+  - family-names: Di Maio
+    given-names: Dario
+    affiliation: "University of Twente"
 version: 0.1.0
 date-released: "2026-07-28"
 license: MIT

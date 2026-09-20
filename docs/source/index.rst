@@ -14,8 +14,7 @@ reconstruction of operating deflection shapes using the polynomial
    <https://doi.org/10.5281/zenodo.22032252>`_). The original material has
    been modified; the differences are listed under *Origin and attribution*
    in the README. The initial Python implementation was written with Claude
-   (Anthropic) and has not yet been reviewed by the authors of the original
-   suite. The package is at an alpha stage.
+   (Anthropic). The package is at an alpha stage.
 
 .. toctree::
    :maxdepth: 2

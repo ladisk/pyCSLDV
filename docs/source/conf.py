@@ -22,8 +22,8 @@ sys.setrecursionlimit(1500)
 # -- Project information -----------------------------------------------------
 
 project = 'pyCSLDV'
-copyright = '2026, Joshua Bartlett, Pablo Tarazaga, Janko Slavič'
-author = 'Joshua Bartlett, Pablo Tarazaga, Janko Slavič'
+copyright = '2026, Janko Slavič, Joshua Bartlett, Pablo Tarazaga, Thijs Masmeijer, Dario Di Maio'
+author = 'Janko Slavič, Joshua Bartlett, Pablo Tarazaga, Thijs Masmeijer, Dario Di Maio'
 one_line_description = 'Continuous scanning laser Doppler vibrometry.'
 
 # The short X.Y version

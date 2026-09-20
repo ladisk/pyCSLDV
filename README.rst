@@ -77,7 +77,7 @@ Development note
 
 The initial Python implementation in this repository was written with
 Claude (Anthropic), working from the published source of the original
-suite. It has not yet been reviewed by the authors of that suite.
+suite.
 
 The reconstruction chain is covered end to end by the test suite: an exact
 Chebyshev shape is recovered from a simulated measurement to within
