@@ -9,8 +9,8 @@ authors = [
     {name = "Janko Slavič", email = "janko.slavic@fs.uni-lj.si"},
     {name = "Joshua Bartlett", email = "jbartlett21@tamu.edu"},
     {name = "Pablo Tarazaga", email = "ptarazaga@tamu.edu"},
-    {name = "Thijs Masmeijer"},
-    {name = "Dario Di Maio"},
+    {name = "Thijs Masmeijer", email = "t.c.p.masmeijer@utwente.nl"},
+    {name = "Dario Di Maio", email = "d.dimaio@utwente.nl"},
 ]
 maintainers = [{name = "Janko Slavič", email = "janko.slavic@fs.uni-lj.si"}]
 license = "MIT"
